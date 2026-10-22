@@ -239,96 +239,19 @@ else
     echo "Skipping icon/caption customization for now; continue to next tasks." >&2
 fi
 
-# Download ArtCraft App Launcher AppImage if not already present.
+# Download ArtCraft AppImage if not already present.
 step "Ensuring ArtCraft AppImage is available..."
-status "Resolving latest ArtCraft AppImage URL from GitHub releases..."
-#ARTCRAFT_URI=""
-#ARTCRAFT_NAME=""
-for repo in \
-    "storytold/craft-launcher" \
-    "storytold/artcraft" \
-    "Skatterbrainz/artcraft-launcher" \
-    "EricVogt93/artcraft-launcher"; do
-    status "Checking ${repo} releases page..."
-    LATEST_URL="$(curl -fsSL -o /dev/null -w '%{url_effective}' \
-        -H "User-Agent: linux_scripts-standard" \
-        "https://github.com/${repo}/releases/latest" 2>/dev/null || true)"
-    if [[ -z "$LATEST_URL" || "$LATEST_URL" != *"/releases/tag/"* ]]; then
-        continue
-    fi
+mkdir -p "$(dirname "$ARTCRAFT_PATH")"
 
-    RELEASE_TAG="${LATEST_URL##*/}"
-    RELEASE_HTML="$(curl -fsSL \
-        -H "User-Agent: linux_scripts-standard" \
-        "https://github.com/${repo}/releases/expanded_assets/${RELEASE_TAG}" \
-        2>/dev/null || true)"
-    if [[ -z "$RELEASE_HTML" ]]; then
-        continue
-    fi
+if [[ ! -f "$ARTCRAFT_PATH" ]]; then
+    status "Downloading ArtCraft AppImage from $ARTCRAFT_URI"
+    curl -fL --retry 2 \
+        -o "$ARTCRAFT_PATH" "$ARTCRAFT_URI"
 
-    ARTCRAFT_RELEASE_INFO=()
-    if readarray -t ARTCRAFT_RELEASE_INFO < <(python3 - <<'PY' <<<"$RELEASE_HTML"
-import re
-import sys
-from urllib.parse import unquote
-
-html = sys.stdin.read()
-matches = re.findall(
-    r'href="([^"]*/releases/download/[^"]*\.AppImage)"',
-    html,
-    flags=re.IGNORECASE,
-)
-
-if not matches:
-    sys.exit(1)
-
-def normalize(url):
-    if url.startswith("/"):
-        return f"https://github.com{url}"
-    return url
-
-def rank(name):
-    lowered = name.lower()
-    if "x86_64" in lowered or "amd64" in lowered:
-        return 0
-    if "linux" in lowered:
-        return 1
-    return 2
-
-choices = []
-for href in matches:
-    url = normalize(href)
-    name = unquote(url.rsplit("/", 1)[-1])
-    choices.append((rank(name), name, url))
-
-choices.sort()
-best = choices[0]
-print(best[1])
-print(best[2])
-PY
-    ); then
-        ARTCRAFT_NAME="${ARTCRAFT_RELEASE_INFO[0]-}"
-        ARTCRAFT_URI="${ARTCRAFT_RELEASE_INFO[1]-}"
-        status "Using ArtCraft release from ${repo}: ${ARTCRAFT_NAME}"
-        break
-    fi
-done
-
-if [[ -n "$ARTCRAFT_URI" && -n "$ARTCRAFT_NAME" ]]; then
-    ARTCRAFT_APPIMAGE="$HOME/AppImages/$ARTCRAFT_NAME"
-    mkdir -p "$HOME/AppImages"
-    if [[ ! -f "$ARTCRAFT_APPIMAGE" ]]; then
-        status "Downloading ArtCraft AppImage to $ARTCRAFT_APPIMAGE"
-        curl -fL --retry 2 -H "User-Agent: linux_scripts-standard" \
-            -o "$ARTCRAFT_APPIMAGE" "$ARTCRAFT_URI"
-        chmod +x "$ARTCRAFT_APPIMAGE"
-        status "ArtCraft AppImage downloaded and marked executable."
-    else
-        status "ArtCraft AppImage already exists. Skipping download."
-    fi
+    chmod +x "$ARTCRAFT_PATH"
+    status "ArtCraft AppImage downloaded and marked executable."
 else
-    echo "Could not find an AppImage asset in known ArtCraft release pages." >&2
-    echo "Skipping ArtCraft download and continuing setup." >&2
+    status "ArtCraft AppImage already exists. Skipping download."
 fi
 
 step "Reloading Cinnamon desktop shell (optional)..."
