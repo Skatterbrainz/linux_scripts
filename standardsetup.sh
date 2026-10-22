@@ -6,6 +6,8 @@ WALLPAPER_URL="https://raw.githubusercontent.com/Skatterbrainz/Garage/refs/heads
 WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
 WALLPAPER="$WALLPAPER_DIR/qYeaEQC-water-droplets-wallpaper.jpg"
 APPLET_DIR="$HOME/.local/share/cinnamon/applets/$UUID"
+ARTCRAFT_URI="https://github.com/storytold/craft-launcher/releases/download/v0.6.1/artcraft-launcher-0.6.1-linux-x86_64.AppImage"
+ARTCRAFT_PATH="$HOME/AppImages/$(basename "$ARTCRAFT_URI")"
 BACKUP="$HOME/cinnamon-enabled-applets.backup"
 SCRIPT_PATH="${BASH_SOURCE[0]-}"
 DEFAULT_TOTAL_STEPS=9
@@ -240,8 +242,8 @@ fi
 # Download ArtCraft App Launcher AppImage if not already present.
 step "Ensuring ArtCraft AppImage is available..."
 status "Resolving latest ArtCraft AppImage URL from GitHub releases..."
-ARTCRAFT_URI=""
-ARTCRAFT_NAME=""
+#ARTCRAFT_URI=""
+#ARTCRAFT_NAME=""
 for repo in \
     "storytold/craft-launcher" \
     "storytold/artcraft" \
