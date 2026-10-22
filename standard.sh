@@ -7,17 +7,40 @@ WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
 WALLPAPER="$WALLPAPER_DIR/qYeaEQC-water-droplets-wallpaper.jpg"
 APPLET_DIR="$HOME/.local/share/cinnamon/applets/$UUID"
 BACKUP="$HOME/cinnamon-enabled-applets.backup"
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+TOTAL_STEPS=0
+CURRENT_STEP=0
 
+status() {
+    echo "[standard.sh] $*"
+}
+
+step() {
+    CURRENT_STEP=$((CURRENT_STEP + 1))
+    echo "[standard.sh] [${CURRENT_STEP}/${TOTAL_STEPS}] $*"
+}
+
+TOTAL_STEPS="$(grep -Ec '^[[:space:]]*step "' "$SCRIPT_PATH" || true)"
+if [[ "$TOTAL_STEPS" -le 0 ]]; then
+    TOTAL_STEPS=1
+fi
+
+step "Starting Cinnamon desktop setup..."
+step "Checking required commands..."
 command -v gsettings >/dev/null
 command -v python3 >/dev/null
 command -v curl >/dev/null
 command -v unzip >/dev/null
+status "Dependencies look good."
 
 # Back up current panel configuration.
+step "Backing up current panel configuration to $BACKUP"
 gsettings get org.cinnamon enabled-applets > "$BACKUP"
 
 # Install Cinnamenu if it isn't already installed.
+step "Ensuring Cinnamenu is installed..."
 if [[ ! -f "$APPLET_DIR/metadata.json" ]]; then
+    status "Cinnamenu not found locally. Downloading and installing..."
     TMPDIR="$(mktemp -d)"
     trap 'rm -rf "$TMPDIR"' EXIT
 
@@ -38,16 +61,24 @@ if [[ ! -f "$APPLET_DIR/metadata.json" ]]; then
 
     mkdir -p "$APPLET_DIR"
     cp -a "$(dirname "$SOURCE")/." "$APPLET_DIR/"
+    status "Cinnamenu installed to $APPLET_DIR"
+else
+    status "Cinnamenu already installed. Skipping applet download."
 fi
 
 # Download wallpaper.
+step "Downloading wallpaper to $WALLPAPER"
 mkdir -p "$WALLPAPER_DIR"
 curl -fL --retry 2 "$WALLPAPER_URL" -o "$WALLPAPER"
+status "Wallpaper downloaded."
 
 # Configure panel: replace menu and center all existing applets.
 # Preserve applet instance IDs and other suffix fields.
+step "Updating panel applets and wallpaper settings..."
+status "Reading current panel applets..."
 CURRENT="$(gsettings get org.cinnamon enabled-applets)"
 
+status "Preparing updated panel applet layout..."
 UPDATED="$(python3 - "$CURRENT" <<'PY'
 import ast
 import sys
@@ -88,6 +119,7 @@ PY
 )"
 
 # Apply settings only after preparation succeeds.
+status "Applying centered panel layout and wallpaper settings..."
 gsettings set org.cinnamon enabled-applets "$UPDATED"
 gsettings set org.cinnamon.desktop.background picture-uri \
     "file://$WALLPAPER"
@@ -95,27 +127,46 @@ gsettings set org.cinnamon.desktop.background picture-uri \
 # Also set the dark-mode wallpaper, where supported.
 if gsettings list-keys org.cinnamon.desktop.background |
     grep -qx picture-uri-dark; then
+    status "Applying dark-mode wallpaper setting..."
     gsettings set org.cinnamon.desktop.background picture-uri-dark \
         "file://$WALLPAPER"
 fi
 
+SPICES_DIR="$HOME/.config/cinnamon/spices/$UUID"
 
-#!/usr/bin/env bash
-set -euo pipefail
+# Resolve the active Cinnamenu instance settings file.
+step "Configuring Cinnamenu icon/caption settings..."
+status "Resolving Cinnamenu settings file..."
+INSTANCE_ID="$(python3 - "$(gsettings get org.cinnamon enabled-applets)" "$UUID" <<'PY'
+import ast
+import sys
 
-SETTINGS="$HOME/.config/cinnamon/spices/Cinnamenu@json/0.json"
+items = ast.literal_eval(sys.argv[1])
+uuid = sys.argv[2]
 
-# Ensure Cinnamenu settings exist.
-if [[ ! -f "$SETTINGS" ]]; then
-    echo "Cinnamenu settings not found: $SETTINGS" >&2
-    exit 1
+for item in items:
+    fields = item.split(":")
+    if len(fields) >= 5 and fields[3] == uuid:
+        print(fields[4])
+        break
+PY
+)"
+
+SETTINGS=""
+if [[ -n "$INSTANCE_ID" && -f "$SPICES_DIR/$INSTANCE_ID.json" ]]; then
+    SETTINGS="$SPICES_DIR/$INSTANCE_ID.json"
+elif [[ -d "$SPICES_DIR" ]]; then
+    SETTINGS="$(find "$SPICES_DIR" -maxdepth 1 -type f -name '*.json' -print -quit)"
 fi
 
-# Back up the current settings.
-cp -a "$SETTINGS" "$SETTINGS.bak"
+if [[ -n "$SETTINGS" ]]; then
+    # Back up the current settings.
+    status "Backing up Cinnamenu settings to $SETTINGS.bak"
+    cp -a "$SETTINGS" "$SETTINGS.bak"
 
-# Hide the caption and select the Cinnamon icon.
-python3 - "$SETTINGS" <<'PY'
+    # Hide the caption and select the Cinnamon icon.
+    status "Updating Cinnamenu icon and caption settings..."
+    python3 - "$SETTINGS" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -134,19 +185,54 @@ with path.open("w", encoding="utf-8") as f:
     f.write("\n")
 PY
 
-echo "Cinnamenu icon and caption configured."
-echo "Restart Cinnamon or log out and back in to apply changes."
+    status "Cinnamenu icon and caption configured: $SETTINGS"
+else
+    echo "Cinnamenu settings file not found under: $SPICES_DIR" >&2
+    echo "Skipping icon/caption customization for now; continue to next tasks." >&2
+fi
 
 # Download ArtCraft App Launcher AppImage if not already present.
-# Actual AppImage version may change, query for latest version
-ARTCRAFT_URI="https://release-assets.githubusercontent.com/github-production-release-asset/1412548284/b396e42f-2e28-4b91-ac13-0da52bb43417?sp=r&sv=2018-11-09&sr=b&spr=https&se=2026-10-20T22%3A15%3A43Z&rscd=attachment%3B+filename%3Dartcraft-launcher-0.5.1-linux-x86_64.AppImage&rsct=application%2Foctet-stream&skoid=96c2d410-5711-43a1-aedd-ab1947aa7ab0&sktid=398a6654-997b-47e9-b12b-9515b896b4de&skt=2026-10-20T21%3A15%3A18Z&ske=2026-10-20T22%3A15%3A43Z&sks=b&skv=2018-11-09&sig=NeeK%2F8TfffspDpnhWcmG2UDfEKW2tB2il14qKdM3o2k%3D&jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmVsZWFzZS1hc3NldHMuZ2l0aHVidXNlcmNvbnRlbnQuY29tIiwia2V5Ijoia2V5MSIsImV4cCI6MTc5MjUzMzI1MywibmJmIjoxNzkyNTMxNDUzLCJwYXRoIjoicmVsZWFzZWFzc2V0cHJvZHVjdGlvbi5ibG9iLmNvcmUud2luZG93cy5uZXQifQ.D3tcvVFO7J56nLNRx1JSus0KtSacr948vR876qbrLgg&response-content-disposition=attachment%3B%20filename%3Dartcraft-launcher-0.5.1-linux-x86_64.AppImage&response-content-type=application%2Foctet-stream"
-ARTCRAFT_APPIMAGE="$HOME/AppImages/artcraft-launcher-0.5.1-linux-x86_64.AppImage"
+step "Ensuring ArtCraft AppImage is available..."
+status "Querying latest ArtCraft release metadata..."
+readarray -t ARTCRAFT_RELEASE_INFO < <(
+    curl -fsSL \
+        "https://api.github.com/repos/Skatterbrainz/artcraft-launcher/releases/latest" \
+        | python3 - <<'PY'
+import json
+import sys
+
+release = json.load(sys.stdin)
+for asset in release.get("assets", []):
+    name = asset.get("name", "")
+    if name.endswith("-linux-x86_64.AppImage"):
+        print(name)
+        print(asset.get("browser_download_url", ""))
+        break
+else:
+    raise SystemExit("No linux x86_64 AppImage asset found in latest release.")
+PY
+)
+
+if [[ "${#ARTCRAFT_RELEASE_INFO[@]}" -ne 2 ||
+      -z "${ARTCRAFT_RELEASE_INFO[0]}" ||
+      -z "${ARTCRAFT_RELEASE_INFO[1]}" ]]; then
+    echo "Could not determine latest ArtCraft AppImage download URL." >&2
+    exit 1
+fi
+
+ARTCRAFT_APPIMAGE="$HOME/AppImages/${ARTCRAFT_RELEASE_INFO[0]}"
+ARTCRAFT_URI="${ARTCRAFT_RELEASE_INFO[1]}"
 mkdir -p "$HOME/AppImages"
 if [[ ! -f "$ARTCRAFT_APPIMAGE" ]]; then
-    wget -O "$ARTCRAFT_APPIMAGE" "$ARTCRAFT_URI"
+    status "Downloading ArtCraft AppImage to $ARTCRAFT_APPIMAGE"
+    curl -fL --retry 2 -o "$ARTCRAFT_APPIMAGE" "$ARTCRAFT_URI"
     chmod +x "$ARTCRAFT_APPIMAGE"
+    status "ArtCraft AppImage downloaded and marked executable."
+else
+    status "ArtCraft AppImage already exists. Skipping download."
 fi
-echo "Configuration applied."
-echo "Wallpaper: $WALLPAPER"
-echo "Panel backup: $BACKUP"
-echo "Log out and back in if Cinnamon does not reload the applet."
+
+step "Configuration applied successfully."
+status "Wallpaper: $WALLPAPER"
+status "Panel backup: $BACKUP"
+status "Log out and back in if Cinnamon does not reload the applet."
