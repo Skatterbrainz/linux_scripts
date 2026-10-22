@@ -179,15 +179,58 @@ path = Path(sys.argv[1])
 with path.open(encoding="utf-8") as f:
     settings = json.load(f)
 
-settings["menu-label"]["value"] = ""
-settings["menu-icon-custom"]["value"] = True
-settings["menu-icon"]["value"] = "cinnamon"
+def set_setting(key, value):
+    if key not in settings:
+        return False
+    entry = settings[key]
+    if isinstance(entry, dict) and "value" in entry:
+        entry["value"] = value
+    else:
+        settings[key] = value
+    return True
+
+def get_setting(key):
+    value = settings.get(key)
+    if isinstance(value, dict) and "value" in value:
+        return value["value"]
+    return value
+
+set_setting("menu-label", "")
+set_setting("menu-icon-custom", True)
+set_setting("menu-icon", "cinnamon-symbolic")
 
 with path.open("w", encoding="utf-8") as f:
     json.dump(settings, f, indent=4, ensure_ascii=False)
     f.write("\n")
+
+print(
+    "Applied values: "
+    f"menu-label={get_setting('menu-label')!r}, "
+    f"menu-icon-custom={get_setting('menu-icon-custom')!r}, "
+    f"menu-icon={get_setting('menu-icon')!r}"
+)
 PY
 
+    status "Configured values: $(python3 - "$SETTINGS" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+settings = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+
+def get_setting(key):
+    value = settings.get(key)
+    if isinstance(value, dict) and "value" in value:
+        return value["value"]
+    return value
+
+print(
+    f"menu-label={get_setting('menu-label')!r}, "
+    f"menu-icon-custom={get_setting('menu-icon-custom')!r}, "
+    f"menu-icon={get_setting('menu-icon')!r}"
+)
+PY
+)"
     status "Cinnamenu icon and caption configured: $SETTINGS"
 else
     echo "Cinnamenu settings file not found under: $SPICES_DIR" >&2
@@ -196,43 +239,126 @@ fi
 
 # Download ArtCraft App Launcher AppImage if not already present.
 step "Ensuring ArtCraft AppImage is available..."
-status "Querying latest ArtCraft release metadata..."
-readarray -t ARTCRAFT_RELEASE_INFO < <(
-    curl -fsSL \
-        "https://api.github.com/repos/Skatterbrainz/artcraft-launcher/releases/latest" \
-        | python3 - <<'PY'
-import json
-import sys
+status "Resolving latest ArtCraft AppImage URL from GitHub releases..."
+ARTCRAFT_URI=""
+ARTCRAFT_NAME=""
+for repo in \
+    "storytold/craft-launcher" \
+    "storytold/artcraft" \
+    "Skatterbrainz/artcraft-launcher" \
+    "EricVogt93/artcraft-launcher"; do
+    status "Checking ${repo} releases page..."
+    LATEST_URL="$(curl -fsSL -o /dev/null -w '%{url_effective}' \
+        -H "User-Agent: linux_scripts-standard" \
+        "https://github.com/${repo}/releases/latest" 2>/dev/null || true)"
+    if [[ -z "$LATEST_URL" || "$LATEST_URL" != *"/releases/tag/"* ]]; then
+        continue
+    fi
 
-release = json.load(sys.stdin)
-for asset in release.get("assets", []):
-    name = asset.get("name", "")
-    if name.endswith("-linux-x86_64.AppImage"):
-        print(name)
-        print(asset.get("browser_download_url", ""))
-        break
-else:
-    raise SystemExit("No linux x86_64 AppImage asset found in latest release.")
-PY
+    RELEASE_TAG="${LATEST_URL##*/}"
+    RELEASE_HTML="$(curl -fsSL \
+        -H "User-Agent: linux_scripts-standard" \
+        "https://github.com/${repo}/releases/expanded_assets/${RELEASE_TAG}" \
+        2>/dev/null || true)"
+    if [[ -z "$RELEASE_HTML" ]]; then
+        continue
+    fi
+
+    ARTCRAFT_RELEASE_INFO=()
+    if readarray -t ARTCRAFT_RELEASE_INFO < <(python3 - <<'PY' <<<"$RELEASE_HTML"
+import re
+import sys
+from urllib.parse import unquote
+
+html = sys.stdin.read()
+matches = re.findall(
+    r'href="([^"]*/releases/download/[^"]*\.AppImage)"',
+    html,
+    flags=re.IGNORECASE,
 )
 
-if [[ "${#ARTCRAFT_RELEASE_INFO[@]}" -ne 2 ||
-      -z "${ARTCRAFT_RELEASE_INFO[0]}" ||
-      -z "${ARTCRAFT_RELEASE_INFO[1]}" ]]; then
-    echo "Could not determine latest ArtCraft AppImage download URL." >&2
-    exit 1
+if not matches:
+    sys.exit(1)
+
+def normalize(url):
+    if url.startswith("/"):
+        return f"https://github.com{url}"
+    return url
+
+def rank(name):
+    lowered = name.lower()
+    if "x86_64" in lowered or "amd64" in lowered:
+        return 0
+    if "linux" in lowered:
+        return 1
+    return 2
+
+choices = []
+for href in matches:
+    url = normalize(href)
+    name = unquote(url.rsplit("/", 1)[-1])
+    choices.append((rank(name), name, url))
+
+choices.sort()
+best = choices[0]
+print(best[1])
+print(best[2])
+PY
+    ); then
+        ARTCRAFT_NAME="${ARTCRAFT_RELEASE_INFO[0]-}"
+        ARTCRAFT_URI="${ARTCRAFT_RELEASE_INFO[1]-}"
+        status "Using ArtCraft release from ${repo}: ${ARTCRAFT_NAME}"
+        break
+    fi
+done
+
+if [[ -n "$ARTCRAFT_URI" && -n "$ARTCRAFT_NAME" ]]; then
+    ARTCRAFT_APPIMAGE="$HOME/AppImages/$ARTCRAFT_NAME"
+    mkdir -p "$HOME/AppImages"
+    if [[ ! -f "$ARTCRAFT_APPIMAGE" ]]; then
+        status "Downloading ArtCraft AppImage to $ARTCRAFT_APPIMAGE"
+        curl -fL --retry 2 -H "User-Agent: linux_scripts-standard" \
+            -o "$ARTCRAFT_APPIMAGE" "$ARTCRAFT_URI"
+        chmod +x "$ARTCRAFT_APPIMAGE"
+        status "ArtCraft AppImage downloaded and marked executable."
+    else
+        status "ArtCraft AppImage already exists. Skipping download."
+    fi
+else
+    echo "Could not find an AppImage asset in known ArtCraft release pages." >&2
+    echo "Skipping ArtCraft download and continuing setup." >&2
 fi
 
-ARTCRAFT_APPIMAGE="$HOME/AppImages/${ARTCRAFT_RELEASE_INFO[0]}"
-ARTCRAFT_URI="${ARTCRAFT_RELEASE_INFO[1]}"
-mkdir -p "$HOME/AppImages"
-if [[ ! -f "$ARTCRAFT_APPIMAGE" ]]; then
-    status "Downloading ArtCraft AppImage to $ARTCRAFT_APPIMAGE"
-    curl -fL --retry 2 -o "$ARTCRAFT_APPIMAGE" "$ARTCRAFT_URI"
-    chmod +x "$ARTCRAFT_APPIMAGE"
-    status "ArtCraft AppImage downloaded and marked executable."
+step "Reloading Cinnamon desktop shell (optional)..."
+VIRT_ENV="unknown"
+if command -v systemd-detect-virt >/dev/null; then
+    VIRT_ENV="$(systemd-detect-virt 2>/dev/null || echo unknown)"
+fi
+
+if [[ "${AUTO_RELOAD_CINNAMON:-0}" != "1" ]]; then
+    status "Automatic Cinnamon reload is disabled by default for safety."
+    status "Run 'cinnamon -r' manually when ready (or set AUTO_RELOAD_CINNAMON=1)."
+elif [[ "$VIRT_ENV" != "none" && "$VIRT_ENV" != "unknown" ]]; then
+    echo "Detected virtualized environment (${VIRT_ENV}); skipping automatic Cinnamon reload." >&2
+    echo "Run 'cinnamon -r' manually only when safe in your VM session." >&2
+elif ! command -v cinnamon >/dev/null; then
+    echo "Cinnamon executable not found; skipping automatic shell reload." >&2
+elif ! command -v timeout >/dev/null; then
+    echo "timeout command not found; skipping automatic Cinnamon reload to avoid hangs." >&2
+    echo "Run 'cinnamon -r' manually from your desktop session." >&2
 else
-    status "ArtCraft AppImage already exists. Skipping download."
+    status "Attempting automatic Cinnamon reload with timeout..."
+    if timeout 10s cinnamon -r; then
+        status "Cinnamon desktop shell reloaded successfully."
+    else
+        reload_exit="$?"
+        if [[ "$reload_exit" -eq 124 ]]; then
+            echo "Automatic Cinnamon reload timed out; skipping to avoid desktop lockup." >&2
+        else
+            echo "Could not reload Cinnamon automatically with 'cinnamon -r' (exit ${reload_exit})." >&2
+        fi
+        echo "Please run 'cinnamon -r' manually from your desktop session if needed." >&2
+    fi
 fi
 
 step "Configuration applied successfully."
