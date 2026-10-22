@@ -7,8 +7,9 @@ WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
 WALLPAPER="$WALLPAPER_DIR/qYeaEQC-water-droplets-wallpaper.jpg"
 APPLET_DIR="$HOME/.local/share/cinnamon/applets/$UUID"
 BACKUP="$HOME/cinnamon-enabled-applets.backup"
-SCRIPT_PATH="${BASH_SOURCE[0]}"
-TOTAL_STEPS=0
+SCRIPT_PATH="${BASH_SOURCE[0]-}"
+DEFAULT_TOTAL_STEPS=9
+TOTAL_STEPS="$DEFAULT_TOTAL_STEPS"
 CURRENT_STEP=0
 
 status() {
@@ -20,9 +21,11 @@ step() {
     echo "[standard.sh] [${CURRENT_STEP}/${TOTAL_STEPS}] $*"
 }
 
-TOTAL_STEPS="$(grep -Ec '^[[:space:]]*step "' "$SCRIPT_PATH" || true)"
-if [[ "$TOTAL_STEPS" -le 0 ]]; then
-    TOTAL_STEPS=1
+if [[ -n "$SCRIPT_PATH" && -f "$SCRIPT_PATH" ]]; then
+    DETECTED_STEPS="$(grep -Ec '^[[:space:]]*step "' "$SCRIPT_PATH" || true)"
+    if [[ "$DETECTED_STEPS" -gt 0 ]]; then
+        TOTAL_STEPS="$DETECTED_STEPS"
+    fi
 fi
 
 step "Starting Cinnamon desktop setup..."
