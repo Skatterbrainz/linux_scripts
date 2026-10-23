@@ -1,7 +1,7 @@
 #!/bin/bash
 #-------------------------------------------------------------
-# Linuxmint setup script by Skatterbrainz
-# version: 1.5, 7/26/2025
+# Linux Mint setup script by Skatterbrainz
+# version: 1.6, 10/22/2026
 #-------------------------------------------------------------
 # To invoke this from a terminal using wget or curl:
 # wget -O /tmp/mint_setup.sh <URL> && /tmp/mint_setup.sh
@@ -12,6 +12,12 @@ CYAN='\033[0;36m'
 YELLOW='\033[0;33m'
 PURPLE='\033[0;35m'
 NC='\033[0m' # No Color
+WALLPAPER_URL="https://raw.githubusercontent.com/Skatterbrainz/Garage/refs/heads/master/qYeaEQC-water-droplets-wallpaper.jpg"
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+WALLPAPER="$WALLPAPER_DIR/qYeaEQC-water-droplets-wallpaper.jpg"
+ARTCRAFT_URI="https://github.com/storytold/craft-launcher/releases/download/v0.6.1/artcraft-launcher-0.6.1-linux-x86_64.AppImage"
+ARTCRAFT_PATH="$HOME/AppImages/$(basename "$ARTCRAFT_URI")"
+mkdir -p "$HOME/AppImages"
 
 log() {
 	echo -e "${GREEN}[$(date '+%Y-%m-%d %H:%M:%S')]${NC} $1"
@@ -82,34 +88,46 @@ for package in "${aptpackages[@]}"; do
 done
 
 #-------------------------------------------------------------
+## Brave Browser
+#-------------------------------------------------------------
+
+FILE="/usr/bin/brave-browser"
+if [ -f "$FILE" ]; then
+	log "*** Brave Browser is already installed"
+else
+	info "*** Installing Brave Browser..."
+	curl -fsS https://dl.brave.com/install.sh | sh
+fi
+
+#-------------------------------------------------------------
 ## FastFetch
 #-------------------------------------------------------------
 cd ~/Downloads
 
-FILE="/bin/fastfetch"
-if [ -f "$FILE" ]; then
-	log "*** FastFetch is already installed"
-else
-	info "*** Installing FastFetch..."
-	sudo add-apt-repository ppa:zhangsongcui3371/fastfetch -y
-	sudo apt update
-	sudo nala install fastfetch -y
-fi
+# FILE="/bin/fastfetch"
+# if [ -f "$FILE" ]; then
+# 	log "*** FastFetch is already installed"
+# else
+# 	info "*** Installing FastFetch..."
+# 	sudo add-apt-repository ppa:zhangsongcui3371/fastfetch -y
+# 	sudo apt update
+# 	sudo nala install fastfetch -y
+# fi
 
 #-------------------------------------------------------------
-## PowerShell 7.5.3 (may need to update often)
+## PowerShell 7.6.8 (may need to update often)
 #-------------------------------------------------------------
 
 FILE="/opt/microsoft/powershell/7/pwsh"
 if [ -f "$FILE" ]; then
 	log "*** PowerShell 7 is already installed"
 else
-	info "*** Installing PowerShell 7..."
+	info "*** Installing PowerShell 7.6.8..."
 	sudo apt-get install -y wget
-	wget https://github.com/PowerShell/PowerShell/releases/download/v7.5.3/powershell_7.5.3-1.deb_amd64.deb
-	sudo dpkg -i powershell_7.5.3-1.deb_amd64.deb
+	wget https://github.com/PowerShell/PowerShell/releases/download/v7.6.8/powershell-lts_7.6.8-1.deb_amd64.deb
+	sudo dpkg -i powershell-lts_7.6.8-1.deb_amd64.deb
 	sudo apt-get install -f
-	rm powershell_7.5.3-1.deb_amd64.deb
+	rm powershell-lts_7.6.8-1.deb_amd64.deb
 fi
 
 #-------------------------------------------------------------
@@ -120,41 +138,46 @@ FILE="/usr/share/code/code"
 if [ -f "$FILE" ]; then
 	log "*** Visual Studio Code is already installed"
 else
-	info "*** Installing Visual Studio Code..."
-	wget https://vscode.download.prss.microsoft.com/dbazure/download/stable/f220831ea2d946c0dcb0f3eaa480eb435a2c1260/code_1.104.0-1757488003_amd64.deb
-	sudo apt install ./code_1.104.0-1757488003_amd64.deb
-	rm ./code_1.104.0-1757488003_amd64.deb
+	info "*** Installing Visual Studio Code 1.143.1..."
+	wget https://vscode.download.prss.microsoft.com/dbazure/download/stable/e646868227c3e3a9e3f24277c8c7220be42c0be7/code_1.143.1-1792691907_amd64.deb
+	sudo apt install ./code_1.143.1-1792691907_amd64.deb
+	rm ./code_1.143.1-1792691907_amd64.deb
 fi
 
 #-------------------------------------------------------------
-## VirtualBox 7.2.4 (may need to update often)
+## VirtualBox 7.2.20 (may need to update often)
 #-------------------------------------------------------------
 
-FILE="/bin/VBox"
-if [ -f "$FILE" ]; then
-	log "*** VirtualBox 7 is already installed"
+# Skip this if the machine is a VM guest running inside VirtualBox
+if systemd-detect-virt -q && [ "$(systemd-detect-virt)" = "oracle" ]; then
+	log "*** Running inside VirtualBox VM, skipping VirtualBox installation"
 else
-	info "*** Installing VirtualBox..."
-	wget https://download.virtualbox.org/virtualbox/7.2.4/virtualbox-7.2_7.2.4-170995~Ubuntu~noble_amd64.deb
-	sudo apt install ./virtualbox-7.2_7.2.4-170995~Ubuntu~noble_amd64.deb -y
-	rm virtualbox-7.2_7.2.4-170995~Ubuntu~noble_amd64.deb
+	FILE="/bin/VBox"
+	if [ -f "$FILE" ]; then
+		log "*** VirtualBox 7 is already installed"
+	else
+		info "*** Installing VirtualBox 7.2.20 ..."
+		wget https://download.virtualbox.org/virtualbox/7.2.20/virtualbox-7.2_7.2.20-175154~Ubuntu~noble_amd64.deb
+		sudo apt install ./virtualbox-7.2_7.2.20-175154~Ubuntu~noble_amd64.deb -y
+		rm virtualbox-7.2_7.2.20-175154~Ubuntu~noble_amd64.deb
+	fi
 fi
 
 #-------------------------------------------------------------
 ## Warp Terminal (see https://www.warp.dev/download)
 #-------------------------------------------------------------
 
-FILE="/usr/bin/warp-terminal"
-if [ -f "$FILE" ]; then
-	log "*** Warp Terminal is already installed"
-else
-	info "*** Installing Warp Terminal..."
-	sudo apt install -y wget
-	wget https://releases.warp.dev/stable/v0.2026.01.21.08.14.stable_03/warp-terminal_0.2026.01.21.08.14.stable.03_amd64.deb
-	sudo dpkg -i ./warp-terminal_0.2026.01.21.08.14.stable.03_amd64.deb
-	sudo apt-get install -f
-	rm ./warp-terminal_0.2026.01.21.08.14.stable.03_amd64.deb
-fi
+# FILE="/usr/bin/warp-terminal"
+# if [ -f "$FILE" ]; then
+# 	log "*** Warp Terminal is already installed"
+# else
+# 	info "*** Installing Warp Terminal..."
+# 	sudo apt install -y wget
+# 	wget https://releases.warp.dev/stable/v0.2026.01.21.08.14.stable_03/warp-terminal_0.2026.01.21.08.14.stable.03_amd64.deb
+# 	sudo dpkg -i ./warp-terminal_0.2026.01.21.08.14.stable.03_amd64.deb
+# 	sudo apt-get install -f
+# 	rm ./warp-terminal_0.2026.01.21.08.14.stable.03_amd64.deb
+# fi
 
 #-------------------------------------------------------------
 ## Flatpak applications
@@ -162,9 +185,8 @@ fi
 
 declare -a flatpak_apps=(
 	"com.bitwarden.desktop"
-	"com.brave.Browser"
 	"com-github.hluk.copyq"
-	"com.jgraph.drawio.desktop"
+	# "com.jgraph.drawio.desktop"
 	"org.gimp.GIMP"
 	"org.gtk.Gtk3theme.Adapta-Nokto"
 	"org.gnome.Papers"
@@ -305,8 +327,85 @@ else
 fi
 
 #-------------------------------------------------------------
-## Additional Utilities
+# Download wallpaper
 #-------------------------------------------------------------
+
+step "Downloading wallpaper to $WALLPAPER"
+mkdir -p "$WALLPAPER_DIR"
+curl -fL --retry 2 "$WALLPAPER_URL" -o "$WALLPAPER"
+status "Wallpaper downloaded."
+
+# Set the downloaded wallpaper as the desktop background
+gsettings set org.cinnamon.desktop.background picture-uri "file://$WALLPAPER"
+
+#-------------------------------------------------------------
+## Additional Utilities and AppImages
+#-------------------------------------------------------------
+
+mkdir -p "$HOME/AppImages"
+
+if [ ! -f "$ARTCRAFT_PATH" ]; then
+	info "*** Downloading ArtCraft Launcher..."
+	curl -fL --retry 2 "$ARTCRAFT_URI" -o "$ARTCRAFT_PATH"
+	chmod +x "$ARTCRAFT_PATH"
+fi
+export PATH="$HOME/AppImages:$PATH"
+
+# download and install WordCraft
+WORDCRAFT_URI="https://github.com/storytold/wordcraft/releases/download/v0.10.0/wordcraft-0.10.0-linux-x86_64.AppImage"
+WORDCRAFT_PATH="$HOME/AppImages/$(basename "$WORDCRAFT_URI")"
+if [ ! -f "$WORDCRAFT_PATH" ]; then
+	info "*** Downloading WordCraft..."
+	curl -fL --retry 2 "$WORDCRAFT_URI" -o "$WORDCRAFT_PATH"
+	chmod +x "$WORDCRAFT_PATH"
+fi
+
+# download and install PDFCraft
+PDFCRAFT_URI="https://github.com/storytold/pdfcraft/releases/download/v0.13.0/pdfcraft-0.13.0-linux-x86_64.AppImage"
+PDFCRAFT_PATH="$HOME/AppImages/$(basename "$PDFCRAFT_URI")"
+if [ ! -f "$PDFCRAFT_PATH" ]; then
+	info "*** Downloading PDFCraft..."
+	curl -fL --retry 2 "$PDFCRAFT_URI" -o "$PDFCRAFT_PATH"
+	chmod +x "$PDFCRAFT_PATH"
+fi
+
+# download and install GridCraft
+GRIDCRAFT_URI="https://github.com/storytold/gridcraft/releases/download/v0.11.1/gridcraft-0.11.1-linux-x86_64.AppImage"
+GRIDCRAFT_PATH="$HOME/AppImages/$(basename "$GRIDCRAFT_URI")"
+if [ ! -f "$GRIDCRAFT_PATH" ]; then
+	info "*** Downloading GridCraft..."
+	curl -fL --retry 2 "$GRIDCRAFT_URI" -o "$GRIDCRAFT_PATH"
+	chmod +x "$GRIDCRAFT_PATH"
+fi
+
+# download and install DeckCraft
+DECKCRAFT_URI="https://github.com/storytold/deckcraft/releases/download/v0.10.0/deckcraft-0.10.0-linux-x86_64.AppImage"
+DECKCRAFT_PATH="$HOME/AppImages/$(basename "$DECKCRAFT_URI")"
+if [ ! -f "$DECKCRAFT_PATH" ]; then
+	info "*** Downloading DeckCraft..."
+	curl -fL --retry 2 "$DECKCRAFT_URI" -o "$DECKCRAFT_PATH"
+	chmod +x "$DECKCRAFT_PATH"
+fi
+
+# download and install Draw.io
+# DRAWIO_URI="https://github.com/jgraph/drawio-desktop/releases/download/v32.5.5/drawio-x86_64-32.5.5.AppImage"
+# DRAWIO_PATH="$HOME/AppImages/$(basename "$DRAWIO_URI")"
+# if [ ! -f "$DRAWIO_PATH" ]; then
+# 	info "*** Downloading Draw.io..."
+# 	curl -fL --retry 2 "$DRAWIO_URI" -o "$DRAWIO_PATH"
+# 	chmod +x "$DRAWIO_PATH"
+# fi
+
+if ! command -v drawio &> /dev/null; then
+	DRAWIO_URI="https://github.com/jgraph/drawio-desktop/releases/download/v32.5.5/drawio-amd64-32.5.5.deb"
+	DRAWIO_PATH="$HOME/AppImages/$(basename "$DRAWIO_URI")"
+	if [ ! -f "$DRAWIO_PATH" ]; then
+		info "*** Downloading Draw.io 32.5.5 ..."
+		curl -fL --retry 2 "$DRAWIO_URI" -o "$DRAWIO_PATH"
+		sudo dpkg -i "$DRAWIO_PATH"
+	fi
+	sudo apt-get install -f -y
+fi
 
 #FILE="~/.cargo/bin/oniux"
 #if [ -f "$FILE" ]; then
