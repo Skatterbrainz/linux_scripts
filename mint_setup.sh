@@ -1,7 +1,7 @@
 #!/bin/bash
 #-------------------------------------------------------------
 # Linux Mint setup script by Skatterbrainz
-# version: 1.8, 10/23/2026
+# version: 1.9.0, 10/23/2026
 #-------------------------------------------------------------
 # To invoke this from a terminal using wget or curl:
 # wget -O /tmp/mint_setup.sh <URL> && /tmp/mint_setup.sh
@@ -38,26 +38,27 @@ error() {
 
 repair_ubuntu_mirrors() {
 	info "*** Falling back to official Ubuntu mirrors..."
-	local source_files=(
-		"/etc/apt/sources.list"
-		"/etc/apt/sources.list.d/official-package-repositories.list"
-	)
+	local source_file
+	local source_files=("/etc/apt/sources.list")
 
-	for source_file in "${source_files[@]}"; do
-		if [ -f "$source_file" ]; then
-			sudo sed -i -E \
-				's|https?://[^/[:space:]]+/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
-				"$source_file"
-		fi
-	done
+	if compgen -G "/etc/apt/sources.list.d/*.list" > /dev/null; then
+		for source_file in /etc/apt/sources.list.d/*.list; do
+			source_files+=("$source_file")
+		done
+	fi
 
 	if compgen -G "/etc/apt/sources.list.d/*.sources" > /dev/null; then
 		for source_file in /etc/apt/sources.list.d/*.sources; do
-			sudo sed -i -E \
-				's|https?://[^/[:space:]]+/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
-				"$source_file"
+			source_files+=("$source_file")
 		done
 	fi
+
+	for source_file in "${source_files[@]}"; do
+		[ -f "$source_file" ] || continue
+		sudo sed -i -E \
+			's|https?://[^/[:space:]]+/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+			"$source_file"
+	done
 }
 
 safe_apt_update() {
