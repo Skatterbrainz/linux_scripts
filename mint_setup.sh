@@ -197,9 +197,9 @@ declare -a flatpak_apps=(
 	"org.nickvision.tubeconverter"
 	"com.github.IsmaelMartinez.teams_for_linux"
 	"org.kde.kdenlive"
-	"org.kdi.kleopatra"
+	"org.kde.kleopatra"
 	"md.obsidian.Obsidian"
-	"org.gnome.Mahjongg"
+#	"org.gnome.Mahjongg"
 	"com.github.wwmm.easyeffects"
 	"com.getpostman.Postman"
 	"io.github.shiftey.Desktop"
@@ -256,6 +256,8 @@ if [[ "$DESKTOP_THEME" == *"Mint-Y-Dark"* ]]; then
 else
 	info "*** Setting theme: Mint-Y-Dark"
 	gsettings set org.cinnamon.desktop.interface gtk-theme "Mint-Y-Dark-Blue"
+	gsettings set org.cinnamon.desktop.interface cursor-theme "Breeze"
+	gsettings set org.cinnamon.desktop.interface icon-theme "Papirus-Dark"
 fi
 
 #-------------------------------------------------------------
