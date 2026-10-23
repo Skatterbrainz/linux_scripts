@@ -67,6 +67,7 @@ fi
 
 declare -a aptpackages=(
 	"git"
+	"gh"
 	"adwaita-icon-theme"
 	"glogg"
 	"kcolorchooser"
@@ -76,7 +77,7 @@ declare -a aptpackages=(
 	"yad"
 	"yt-dlp"
 	"cargo"
-	"easytag"
+	"puddletag"
 	"jq"
 	"smartmontools"
 	"gsmartcontrol"
@@ -186,7 +187,6 @@ fi
 declare -a flatpak_apps=(
 	"com.bitwarden.desktop"
 	"com-github.hluk.copyq"
-	# "com.jgraph.drawio.desktop"
 	"org.gimp.GIMP"
 	"org.gtk.Gtk3theme.Adapta-Nokto"
 	"org.gnome.Papers"
@@ -198,7 +198,6 @@ declare -a flatpak_apps=(
 	"com.github.IsmaelMartinez.teams_for_linux"
 	"org.kde.kdenlive"
 	"org.kdi.kleopatra"
-	"net.puddletag.puddletag"
 	"md.obsidian.Obsidian"
 	"org.gnome.Mahjongg"
 	"com.github.wwmm.easyeffects"
