@@ -36,6 +36,62 @@ error() {
 	exit 1
 }
 
+repair_ubuntu_mirrors() {
+	info "*** Falling back to official Ubuntu mirrors..."
+	local source_files=(
+		"/etc/apt/sources.list"
+		"/etc/apt/sources.list.d/official-package-repositories.list"
+	)
+
+	for source_file in "${source_files[@]}"; do
+		if [ -f "$source_file" ]; then
+			sudo sed -i -E \
+				's|https?://[^/[:space:]]+/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+				"$source_file"
+		fi
+	done
+
+	if compgen -G "/etc/apt/sources.list.d/*.sources" > /dev/null; then
+		for source_file in /etc/apt/sources.list.d/*.sources; do
+			sudo sed -i -E \
+				's|https?://[^/[:space:]]+/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+				"$source_file"
+		done
+	fi
+}
+
+safe_apt_update() {
+	local apt_log
+	apt_log="$(mktemp)"
+
+	if sudo apt update < /dev/null > >(tee "$apt_log") 2>&1; then
+		rm -f "$apt_log"
+		return 0
+	fi
+
+	warn "*** apt update failed. Attempting mirror recovery..."
+	info "*** Mirrors reported by apt before recovery:"
+	while IFS= read -r mirror_host; do
+		[ -z "$mirror_host" ] && continue
+		info "*** Mirror host: $mirror_host"
+		grep -Rns --no-messages \
+			"$mirror_host" \
+			/etc/apt/sources.list \
+			/etc/apt/sources.list.d \
+			|| warn "*** No apt source entry found for: $mirror_host"
+	done < <(
+		grep -E '^(Err:|E: Failed to fetch )https?://' "$apt_log" |
+		sed -E 's|.*https?://([^/[:space:]]+).*|\1|' |
+		sort -u
+	)
+
+	repair_ubuntu_mirrors
+	sudo apt clean
+	sudo rm -rf /var/lib/apt/lists/*
+	rm -f "$apt_log"
+	sudo apt update < /dev/null || error "apt update failed after mirror recovery"
+}
+
 # Check if running as root
 if [[ $EUID -eq 0 ]]; then
    error "This script should not be run as root"
@@ -48,16 +104,17 @@ fi
 
 log "Starting system setup..."
 
-sudo apt update
+safe_apt_update
 
 FILE="/usr/bin/nala"
 if [ -f "$FILE" ]; then
 	log "*** Nala is already installed"
 else
 	info "*** Installing Nala..."
-	sudo apt install -y nala
+	sudo apt install -y nala < /dev/null
 	info "*** Updating Nala repository list..."
-	sudo nala fetch --auto --fetches 8 --country US
+	sudo nala fetch --auto --fetches 8 --country US < /dev/null
+	safe_apt_update
 	log "*** Nala installed successfully"
 fi
 
@@ -85,7 +142,7 @@ declare -a aptpackages=(
 
 for package in "${aptpackages[@]}"; do
 	info "*** Installing apt package: $package"
-	sudo nala install "$package" -y
+	sudo nala install "$package" -y < /dev/null
 done
 
 #-------------------------------------------------------------
@@ -97,11 +154,11 @@ if [ -f "$FILE" ]; then
 	log "*** Brave Browser is already installed"
 else
 	info "*** Installing Brave Browser..."
-	sudo apt install curl ca-certificates -y
+	sudo apt install curl ca-certificates -y < /dev/null
 	sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
 	sudo curl -fsSLo /etc/apt/sources.list.d/brave-browser-release.sources https://brave-browser-apt-release.s3.brave.com/brave-browser.sources
-	sudo apt update
-	sudo apt install brave-browser -y
+	safe_apt_update
+	sudo apt install brave-browser -y < /dev/null
 	#curl -fsS https://dl.brave.com/install.sh | bash
 fi
 
@@ -116,7 +173,7 @@ cd ~/Downloads
 # else
 # 	info "*** Installing FastFetch..."
 # 	sudo add-apt-repository ppa:zhangsongcui3371/fastfetch -y
-# 	sudo apt update
+# 	safe_apt_update
 # 	sudo nala install fastfetch -y
 # fi
 
@@ -129,10 +186,10 @@ if [ -f "$FILE" ]; then
 	log "*** PowerShell 7 is already installed"
 else
 	info "*** Installing PowerShell 7.6.8..."
-	sudo apt-get install -y wget
+	sudo apt-get install -y wget < /dev/null
 	wget https://github.com/PowerShell/PowerShell/releases/download/v7.6.8/powershell-lts_7.6.8-1.deb_amd64.deb
-	sudo dpkg -i powershell-lts_7.6.8-1.deb_amd64.deb
-	sudo apt-get install -f
+	sudo dpkg -i powershell-lts_7.6.8-1.deb_amd64.deb < /dev/null
+	sudo apt-get install -f < /dev/null
 	rm powershell-lts_7.6.8-1.deb_amd64.deb
 fi
 
@@ -146,7 +203,7 @@ if [ -f "$FILE" ]; then
 else
 	info "*** Installing Visual Studio Code 1.143.1..."
 	wget https://vscode.download.prss.microsoft.com/dbazure/download/stable/e646868227c3e3a9e3f24277c8c7220be42c0be7/code_1.143.1-1792691907_amd64.deb
-	sudo apt install ./code_1.143.1-1792691907_amd64.deb -y
+	sudo apt install ./code_1.143.1-1792691907_amd64.deb -y < /dev/null
 	rm ./code_1.143.1-1792691907_amd64.deb
 fi
 
@@ -164,7 +221,7 @@ else
 	else
 		info "*** Installing VirtualBox 7.2.20 ..."
 		wget https://download.virtualbox.org/virtualbox/7.2.20/virtualbox-7.2_7.2.20-175154~Ubuntu~noble_amd64.deb
-		sudo apt install ./virtualbox-7.2_7.2.20-175154~Ubuntu~noble_amd64.deb -y
+		sudo apt install ./virtualbox-7.2_7.2.20-175154~Ubuntu~noble_amd64.deb -y < /dev/null
 		rm virtualbox-7.2_7.2.20-175154~Ubuntu~noble_amd64.deb
 	fi
 fi
@@ -204,7 +261,6 @@ declare -a flatpak_apps=(
 	"org.kde.kdenlive"
 	"org.kde.kleopatra"
 	"md.obsidian.Obsidian"
-#	"org.gnome.Mahjongg"
 	"com.github.wwmm.easyeffects"
 	"com.getpostman.Postman"
 	"io.github.shiftey.Desktop"
@@ -216,7 +272,7 @@ for app in "${flatpak_apps[@]}"; do
 		continue
 	else
 		info "*** Installing Flatpak application: $app"
-		flatpak install "$app" -y
+		flatpak install "$app" -y < /dev/null
 	fi
 done
 
@@ -234,8 +290,8 @@ fi
 
 info "*** Checking for updates..."
 #sudo nala update && sudo apt upgrade -y
-sudo nala upgrade -y
-flatpak update -y
+sudo nala upgrade -y < /dev/null
+flatpak update -y < /dev/null
 
 #-------------------------------------------------------------
 ## Themes and Icons
@@ -248,9 +304,10 @@ if [ -f "$FILE" ]; then
 else
 	#echo -e "${YELLOW}*** Downloading Papirus-Dark theme...${NC}"
 	info "*** Downloading Papirus-Dark theme..."
-	sudo apt install -y software-properties-common
-	sudo add-apt-repository ppa:papirus/papirus -y
-	sudo apt update && sudo apt install papirus-icon-theme -y
+	sudo apt install -y software-properties-common < /dev/null
+	sudo add-apt-repository ppa:papirus/papirus -y < /dev/null
+	safe_apt_update
+	sudo apt install papirus-icon-theme -y < /dev/null
 	info "*** Setting Papirus-Dark as icon theme"
 	gsettings set org.cinnamon.desktop.interface icon-theme "Papirus-Dark"
 fi
@@ -292,7 +349,7 @@ if [ -f "$VFILE" ]; then
 	fi
 else
 	info "*** VBoxManage not found, installing VirtualBox applet..."
-	sudo apt install -y virtualbox
+	sudo apt install -y virtualbox < /dev/null
 fi
 
 FILE="Cinnamenu@json/metadata.json"
@@ -535,9 +592,9 @@ if ! command -v drawio &> /dev/null; then
 	if [ ! -f "$DRAWIO_PATH" ]; then
 		info "*** Downloading Draw.io 32.5.5 ..."
 		curl -fL --retry 2 "$DRAWIO_URI" -o "$DRAWIO_PATH"
-		sudo dpkg -i "$DRAWIO_PATH"
+		sudo dpkg -i "$DRAWIO_PATH" < /dev/null
 	fi
-	sudo apt-get install -f -y
+	sudo apt-get install -f -y < /dev/null
 fi
 
 #FILE="~/.cargo/bin/oniux"
