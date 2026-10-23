@@ -97,7 +97,12 @@ if [ -f "$FILE" ]; then
 	log "*** Brave Browser is already installed"
 else
 	info "*** Installing Brave Browser..."
-	curl -fsS https://dl.brave.com/install.sh | sh
+	sudo apt install curl ca-certificates -y
+	sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
+	sudo curl -fsSLo /etc/apt/sources.list.d/brave-browser-release.sources https://brave-browser-apt-release.s3.brave.com/brave-browser.sources
+	sudo apt update
+	sudo apt install brave-browser -y
+	#curl -fsS https://dl.brave.com/install.sh | bash
 fi
 
 #-------------------------------------------------------------
