@@ -1,7 +1,7 @@
 #!/bin/bash
 #-------------------------------------------------------------
 # Linux Mint setup script by Skatterbrainz
-# version: 1.9.1, 10/23/2026
+# version: 1.9.2, 10/23/2026
 #-------------------------------------------------------------
 # To invoke this from a terminal using wget or curl:
 # wget -O /tmp/mint_setup.sh <URL> && /tmp/mint_setup.sh
@@ -65,7 +65,7 @@ safe_apt_update() {
 	local apt_log
 	apt_log="$(mktemp)"
 
-	if sudo apt update < /dev/null > >(tee "$apt_log") 2>&1; then
+	if sudo DEBIAN_FRONTEND=noninteractive apt update < /dev/null > >(tee "$apt_log") 2>&1; then
 		rm -f "$apt_log"
 		return 0
 	fi
@@ -90,7 +90,7 @@ safe_apt_update() {
 	sudo apt clean
 	sudo rm -rf /var/lib/apt/lists/*
 	rm -f "$apt_log"
-	sudo apt update < /dev/null || error "apt update failed after mirror recovery"
+	sudo DEBIAN_FRONTEND=noninteractive apt update < /dev/null || error "apt update failed after mirror recovery"
 }
 
 dedupe_nala_sources() {
@@ -123,7 +123,7 @@ if [ -f "$FILE" ]; then
 	log "*** Nala is already installed"
 else
 	info "*** Installing Nala..."
-	sudo apt install -y nala < /dev/null
+	sudo DEBIAN_FRONTEND=noninteractive apt install -y nala < /dev/null
 	info "*** Updating Nala repository list..."
 	sudo nala fetch --auto --fetches 8 --country US < /dev/null
 	safe_apt_update
@@ -167,7 +167,7 @@ if [ -f "$FILE" ]; then
 	log "*** Brave Browser is already installed"
 else
 	info "*** Installing Brave Browser..."
-	sudo apt install curl ca-certificates -y < /dev/null
+	sudo DEBIAN_FRONTEND=noninteractive apt install curl ca-certificates -y < /dev/null
 	sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
 	sudo curl -fsSLo /etc/apt/sources.list.d/brave-browser-release.sources https://brave-browser-apt-release.s3.brave.com/brave-browser.sources
 	safe_apt_update
@@ -199,10 +199,10 @@ if [ -f "$FILE" ]; then
 	log "*** PowerShell 7 is already installed"
 else
 	info "*** Installing PowerShell 7.6.8..."
-	sudo apt-get install -y wget < /dev/null
+	sudo DEBIAN_FRONTEND=noninteractive apt-get install -y wget < /dev/null
 	wget https://github.com/PowerShell/PowerShell/releases/download/v7.6.8/powershell-lts_7.6.8-1.deb_amd64.deb
-	sudo dpkg -i powershell-lts_7.6.8-1.deb_amd64.deb < /dev/null
-	sudo apt-get install -f < /dev/null
+	sudo DEBIAN_FRONTEND=noninteractive dpkg -i powershell-lts_7.6.8-1.deb_amd64.deb < /dev/null
+	sudo DEBIAN_FRONTEND=noninteractive apt-get install -f < /dev/null
 	rm powershell-lts_7.6.8-1.deb_amd64.deb
 fi
 
@@ -214,10 +214,17 @@ FILE="/usr/share/code/code"
 if [ -f "$FILE" ]; then
 	log "*** Visual Studio Code is already installed"
 else
-	info "*** Installing Visual Studio Code 1.143.1..."
-	wget https://vscode.download.prss.microsoft.com/dbazure/download/stable/e646868227c3e3a9e3f24277c8c7220be42c0be7/code_1.143.1-1792691907_amd64.deb
-	sudo apt install ./code_1.143.1-1792691907_amd64.deb -y < /dev/null
-	rm ./code_1.143.1-1792691907_amd64.deb
+	info "*** Installing Visual Studio Code from Microsoft apt repository..."
+	sudo DEBIAN_FRONTEND=noninteractive apt install -y curl ca-certificates gnupg < /dev/null
+	sudo install -d -m 0755 /etc/apt/keyrings
+	curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
+		| gpg --dearmor \
+		| sudo tee /etc/apt/keyrings/packages.microsoft.gpg > /dev/null
+	sudo chmod a+r /etc/apt/keyrings/packages.microsoft.gpg
+	echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" \
+		| sudo tee /etc/apt/sources.list.d/vscode.list > /dev/null
+	safe_apt_update
+	sudo DEBIAN_FRONTEND=noninteractive apt install -y code < /dev/null
 fi
 
 #-------------------------------------------------------------
@@ -234,7 +241,7 @@ else
 	else
 		info "*** Installing VirtualBox 7.2.20 ..."
 		wget https://download.virtualbox.org/virtualbox/7.2.20/virtualbox-7.2_7.2.20-175154~Ubuntu~noble_amd64.deb
-		sudo apt install ./virtualbox-7.2_7.2.20-175154~Ubuntu~noble_amd64.deb -y < /dev/null
+		sudo DEBIAN_FRONTEND=noninteractive apt install ./virtualbox-7.2_7.2.20-175154~Ubuntu~noble_amd64.deb -y < /dev/null
 		rm virtualbox-7.2_7.2.20-175154~Ubuntu~noble_amd64.deb
 	fi
 fi
@@ -317,10 +324,10 @@ if [ -f "$FILE" ]; then
 else
 	#echo -e "${YELLOW}*** Downloading Papirus-Dark theme...${NC}"
 	info "*** Downloading Papirus-Dark theme..."
-	sudo apt install -y software-properties-common < /dev/null
-	sudo add-apt-repository ppa:papirus/papirus -y < /dev/null
+	sudo DEBIAN_FRONTEND=noninteractive apt install -y software-properties-common < /dev/null
+	sudo DEBIAN_FRONTEND=noninteractive add-apt-repository ppa:papirus/papirus -y < /dev/null
 	safe_apt_update
-	sudo apt install papirus-icon-theme -y < /dev/null
+	sudo DEBIAN_FRONTEND=noninteractive apt install papirus-icon-theme -y < /dev/null
 	info "*** Setting Papirus-Dark as icon theme"
 	gsettings set org.cinnamon.desktop.interface icon-theme "Papirus-Dark"
 fi
@@ -362,7 +369,7 @@ if [ -f "$VFILE" ]; then
 	fi
 else
 	info "*** VBoxManage not found, installing VirtualBox applet..."
-	sudo apt install -y virtualbox < /dev/null
+	sudo DEBIAN_FRONTEND=noninteractive apt install -y virtualbox < /dev/null
 fi
 
 FILE="Cinnamenu@json/metadata.json"
@@ -605,9 +612,9 @@ if ! command -v drawio &> /dev/null; then
 	if [ ! -f "$DRAWIO_PATH" ]; then
 		info "*** Downloading Draw.io 32.5.5 ..."
 		curl -fL --retry 2 "$DRAWIO_URI" -o "$DRAWIO_PATH"
-		sudo dpkg -i "$DRAWIO_PATH" < /dev/null
+		sudo DEBIAN_FRONTEND=noninteractive dpkg -i "$DRAWIO_PATH" < /dev/null
 	fi
-	sudo apt-get install -f -y < /dev/null
+	sudo DEBIAN_FRONTEND=noninteractive apt-get install -f -y < /dev/null
 fi
 
 #FILE="~/.cargo/bin/oniux"
