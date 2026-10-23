@@ -1,7 +1,7 @@
 #!/bin/bash
 #-------------------------------------------------------------
 # Linux Mint setup script by Skatterbrainz
-# version: 1.9.0, 10/23/2026
+# version: 1.9.1, 10/23/2026
 #-------------------------------------------------------------
 # To invoke this from a terminal using wget or curl:
 # wget -O /tmp/mint_setup.sh <URL> && /tmp/mint_setup.sh
@@ -93,6 +93,17 @@ safe_apt_update() {
 	sudo apt update < /dev/null || error "apt update failed after mirror recovery"
 }
 
+dedupe_nala_sources() {
+	local nala_sources_file="/etc/apt/sources.list.d/nala-sources.list"
+	local tmp_file
+
+	[ -f "$nala_sources_file" ] || return 0
+	tmp_file="$(mktemp)"
+
+	sudo awk '!seen[$0]++' "$nala_sources_file" > "$tmp_file"
+	sudo mv "$tmp_file" "$nala_sources_file"
+}
+
 # Check if running as root
 if [[ $EUID -eq 0 ]]; then
    error "This script should not be run as root"
@@ -119,6 +130,9 @@ else
 	log "*** Nala installed successfully"
 fi
 
+dedupe_nala_sources
+safe_apt_update
+
 #-------------------------------------------------------------
 ## Apt packages 
 #-------------------------------------------------------------
@@ -141,10 +155,8 @@ declare -a aptpackages=(
 	"gsmartcontrol"
 )
 
-for package in "${aptpackages[@]}"; do
-	info "*** Installing apt package: $package"
-	sudo nala install "$package" -y < /dev/null
-done
+info "*** Installing apt package set..."
+sudo nala install -y "${aptpackages[@]}" < /dev/null
 
 #-------------------------------------------------------------
 ## Brave Browser
