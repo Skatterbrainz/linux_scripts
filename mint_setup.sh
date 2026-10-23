@@ -1,7 +1,7 @@
 #!/bin/bash
 #-------------------------------------------------------------
 # Linux Mint setup script by Skatterbrainz
-# version: 1.7, 10/22/2026
+# version: 1.8, 10/23/2026
 #-------------------------------------------------------------
 # To invoke this from a terminal using wget or curl:
 # wget -O /tmp/mint_setup.sh <URL> && /tmp/mint_setup.sh
@@ -146,7 +146,7 @@ if [ -f "$FILE" ]; then
 else
 	info "*** Installing Visual Studio Code 1.143.1..."
 	wget https://vscode.download.prss.microsoft.com/dbazure/download/stable/e646868227c3e3a9e3f24277c8c7220be42c0be7/code_1.143.1-1792691907_amd64.deb
-	sudo apt install ./code_1.143.1-1792691907_amd64.deb
+	sudo apt install ./code_1.143.1-1792691907_amd64.deb -y
 	rm ./code_1.143.1-1792691907_amd64.deb
 fi
 
@@ -302,6 +302,133 @@ else
 	info "*** Downloading Cinnamenu..."
 	wget https://cinnamon-spices.linuxmint.com/files/applets/Cinnamenu@json.zip && unzip Cinnamenu@json.zip
 	rm Cinnamenu@json.zip*
+fi
+
+UUID="Cinnamenu@json"
+GROUPED_WINDOWS_UUID="grouped-window-list@cinnamon.org"
+BACKUP="$HOME/cinnamon-enabled-applets.backup"
+SPICES_DIR="$HOME/.config/cinnamon/spices/$UUID"
+
+info "*** Backing up current Cinnamon panel applet layout..."
+gsettings get org.cinnamon enabled-applets > "$BACKUP"
+
+info "*** Updating panel layout: center=Cinnamenu+Grouped Windows List, others=right..."
+CURRENT_APPLETS="$(gsettings get org.cinnamon enabled-applets)"
+UPDATED_APPLETS="$(python3 - "$CURRENT_APPLETS" "$UUID" "$GROUPED_WINDOWS_UUID" <<'PY'
+import ast
+import sys
+
+items = ast.literal_eval(sys.argv[1])
+cinnamenu_uuid = sys.argv[2]
+grouped_windows_uuid = sys.argv[3]
+
+other_applets = []
+target_panel = None
+cinnamenu_suffix = []
+grouped_windows_suffix = []
+cinnamenu_found = False
+grouped_windows_found = False
+
+for item in items:
+    fields = item.split(":")
+    if len(fields) < 4:
+        raise SystemExit(f"Unexpected applet entry: {item}")
+
+    panel, zone, position, uuid = fields[:4]
+    suffix = fields[4:]
+
+    if uuid in ("menu@cinnamon.org", cinnamenu_uuid):
+        if not cinnamenu_found:
+            cinnamenu_found = True
+            cinnamenu_suffix = suffix
+            if target_panel is None:
+                target_panel = panel
+        continue
+
+    if uuid == grouped_windows_uuid:
+        if not grouped_windows_found:
+            grouped_windows_found = True
+            grouped_windows_suffix = suffix
+            if target_panel is None:
+                target_panel = panel
+        continue
+
+    other_applets.append((panel, uuid, suffix))
+
+if target_panel is None:
+    target_panel = "1"
+
+result = [
+    ":".join([target_panel, "center", "0", cinnamenu_uuid, *cinnamenu_suffix]),
+    ":".join([target_panel, "center", "1", grouped_windows_uuid, *grouped_windows_suffix]),
+]
+
+right_position = 0
+for _panel, uuid, suffix in other_applets:
+    result.append(":".join([target_panel, "right", str(right_position), uuid, *suffix]))
+    right_position += 1
+
+print(repr(result))
+PY
+)"
+gsettings set org.cinnamon enabled-applets "$UPDATED_APPLETS"
+
+info "*** Resolving active Cinnamenu settings file..."
+INSTANCE_ID="$(python3 - "$(gsettings get org.cinnamon enabled-applets)" "$UUID" <<'PY'
+import ast
+import sys
+
+items = ast.literal_eval(sys.argv[1])
+uuid = sys.argv[2]
+
+for item in items:
+    fields = item.split(":")
+    if len(fields) >= 5 and fields[3] == uuid:
+        print(fields[4])
+        break
+PY
+)"
+
+SETTINGS_FILE=""
+if [[ -n "$INSTANCE_ID" && -f "$SPICES_DIR/$INSTANCE_ID.json" ]]; then
+	SETTINGS_FILE="$SPICES_DIR/$INSTANCE_ID.json"
+elif [[ -d "$SPICES_DIR" ]]; then
+	SETTINGS_FILE="$(find "$SPICES_DIR" -maxdepth 1 -type f -name '*.json' -print -quit)"
+fi
+
+if [[ -n "$SETTINGS_FILE" ]]; then
+	info "*** Backing up Cinnamenu settings..."
+	cp -a "$SETTINGS_FILE" "$SETTINGS_FILE.bak"
+
+	info "*** Applying Cinnamenu icon and caption settings..."
+	python3 - "$SETTINGS_FILE" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+settings = json.loads(path.read_text(encoding="utf-8"))
+
+def set_setting(key, value):
+    if key not in settings:
+        return
+    entry = settings[key]
+    if isinstance(entry, dict) and "value" in entry:
+        entry["value"] = value
+    else:
+        settings[key] = value
+
+set_setting("menu-label", "")
+set_setting("menu-icon-custom", True)
+set_setting("menu-icon", "cinnamon-symbolic")
+
+path.write_text(
+    json.dumps(settings, indent=4, ensure_ascii=False) + "\n",
+    encoding="utf-8",
+)
+PY
+else
+	warn "*** Cinnamenu settings file not found under $SPICES_DIR; skipping icon/caption customization"
 fi
 
 FILE="sound150@claudiux/metadata.json"
