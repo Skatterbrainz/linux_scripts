@@ -1,7 +1,7 @@
 #!/bin/bash
 #-------------------------------------------------------------
 # Linux Mint setup script by Skatterbrainz
-# version: 1.18.0, 10/24/2026
+# version: 1.19.0, 10/24/2026
 #-------------------------------------------------------------
 # To invoke this from a terminal using wget or curl obtain the URL from the "raw" view of this script:
 # wget -O /tmp/mint_setup.sh <URL> && /tmp/mint_setup.sh
@@ -988,8 +988,8 @@ EOF
 fi
 
 log "Setup is complete!. Please restart your system to apply all changes."
-if [ -t 0 ]; then
-	read -r -p "Reboot now? Press Y to reboot immediately, or any other key to skip: " REBOOT_CHOICE
+if [ -r /dev/tty ]; then
+	read -r -p "Reboot now? Press Y to reboot immediately, or any other key to skip: " REBOOT_CHOICE < /dev/tty
 	if [[ "$REBOOT_CHOICE" =~ ^[Yy]$ ]]; then
 		info "*** Rebooting now..."
 		sudo reboot
@@ -997,5 +997,5 @@ if [ -t 0 ]; then
 		info "*** Reboot skipped. Please reboot later to apply all changes."
 	fi
 else
-	info "*** Non-interactive run detected; skipping reboot prompt."
+	info "*** No controlling terminal detected; skipping reboot prompt."
 fi
