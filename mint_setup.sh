@@ -1,10 +1,12 @@
 #!/bin/bash
 #-------------------------------------------------------------
 # Linux Mint setup script by Skatterbrainz
-# version: 1.15.0, 10/23/2026
+# version: 1.16.0, 10/23/2026
 #-------------------------------------------------------------
-# To invoke this from a terminal using wget or curl:
+# To invoke this from a terminal using wget or curl obtain the URL from the "raw" view of this script:
 # wget -O /tmp/mint_setup.sh <URL> && /tmp/mint_setup.sh
+# or
+# curl -fsL <URL> | bash
 #-------------------------------------------------------------
 INSTALL_BRAVE=true
 INSTALL_VSCODE=true
@@ -81,6 +83,8 @@ WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
 WALLPAPER="$WALLPAPER_DIR/qYeaEQC-water-droplets-wallpaper.jpg"
 ARTCRAFT_URI="https://github.com/storytold/craft-launcher/releases/download/v0.7.0/artcraft-launcher-0.7.0-linux-x86_64.AppImage"
 ARTCRAFT_PATH="$HOME/Applications/$(basename "$ARTCRAFT_URI")"
+ARTCRAFT_ONCE_SCRIPT="$HOME/.local/bin/mintsetup-launch-artcraft-once.sh"
+ARTCRAFT_ONCE_DESKTOP="$HOME/.config/autostart/mintsetup-artcraft-once.desktop"
 mkdir -p "$HOME/Applications"
 
 LOG_FILE="$HOME/mintsetup.log"
@@ -878,6 +882,39 @@ if [ "$INSTALL_ARTCRAFT" = true ]; then
 		curl -fL --retry 2 "$ARTCRAFT_URI" -o "$ARTCRAFT_PATH"
 		chmod +x "$ARTCRAFT_PATH"
 	fi
+
+	if [ -f "$ARTCRAFT_PATH" ]; then
+		info "*** Scheduling one-time ArtCraft launch for next login..."
+		mkdir -p "$HOME/.local/bin" "$HOME/.config/autostart"
+		cat > "$ARTCRAFT_ONCE_SCRIPT" <<EOF
+#!/bin/bash
+set -e
+DESKTOP_FILE="$ARTCRAFT_ONCE_DESKTOP"
+SCRIPT_FILE="$ARTCRAFT_ONCE_SCRIPT"
+APPIMAGE="$ARTCRAFT_PATH"
+
+rm -f "\$DESKTOP_FILE"
+if [ -x "\$APPIMAGE" ]; then
+	nohup "\$APPIMAGE" >/dev/null 2>&1 &
+fi
+rm -f "\$SCRIPT_FILE"
+EOF
+		chmod +x "$ARTCRAFT_ONCE_SCRIPT"
+
+		cat > "$ARTCRAFT_ONCE_DESKTOP" <<EOF
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Mint Setup One-Time ArtCraft Launch
+Comment=Launch ArtCraft once after next login
+Exec=/bin/bash -lc "$ARTCRAFT_ONCE_SCRIPT"
+Terminal=false
+X-GNOME-Autostart-enabled=true
+NoDisplay=true
+EOF
+	else
+		warn "*** ArtCraft launcher file not found at $ARTCRAFT_PATH; skipping one-time launch setup"
+	fi
 fi
 export PATH="$HOME/Applications:$PATH"
 
@@ -919,3 +956,10 @@ EOF
 fi
 
 log "Setup is complete!. Please restart your system to apply all changes."
+read -r -p "Reboot now? Press Y to reboot immediately, or any other key to skip: " REBOOT_CHOICE
+if [[ "$REBOOT_CHOICE" =~ ^[Yy]$ ]]; then
+	info "*** Rebooting now..."
+	sudo reboot
+else
+	info "*** Reboot skipped. Please reboot later to apply all changes."
+fi
