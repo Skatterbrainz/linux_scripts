@@ -1,7 +1,7 @@
 #!/bin/bash
 #-------------------------------------------------------------
 # Linux Mint setup script by Skatterbrainz
-# version: 1.10.0, 10/23/2026
+# version: 1.11.0, 10/23/2026
 #-------------------------------------------------------------
 # To invoke this from a terminal using wget or curl:
 # wget -O /tmp/mint_setup.sh <URL> && /tmp/mint_setup.sh
@@ -19,6 +19,16 @@ INSTALL_WALLPAPER=true
 CONFIGURE_PANEL=true
 # Cinnamenu icon can be a theme icon name ("cinnamon-symbolic") or an absolute image path.
 CINNAMENU_ICON="cinnamon-symbolic"
+# Ordered launcher IDs to pin first in the Grouped Window List (center panel).
+declare -a GROUPED_WINDOW_PINNED_LAUNCHERS=(
+	"libreoffice-writer.desktop"                          # LibreOffice Writer
+	"libreoffice-calc.desktop"                            # LibreOffice Calc
+	"libreoffice-impress.desktop"                         # LibreOffice Impress
+	"drawio.desktop"                                      # Draw.io (falls back to common alt IDs)
+	"code.desktop"                                        # Visual Studio Code
+	"brave-browser.desktop"                               # Brave Browser
+	"com.github.IsmaelMartinez.teams_for_linux.desktop:flatpak" # Teams for Linux
+)
 
 declare -a aptpackages=(
 	"git"
@@ -395,6 +405,7 @@ if [ "$INSTALL_APPLETS" = true ]; then
 	GROUPED_WINDOWS_UUID="grouped-window-list@cinnamon.org"
 	BACKUP="$HOME/cinnamon-enabled-applets.backup"
 	SPICES_DIR="$HOME/.config/cinnamon/spices/$UUID"
+	GROUPED_SPICES_DIR="$HOME/.config/cinnamon/spices/$GROUPED_WINDOWS_UUID"
 
 	info "*** Backing up current Cinnamon panel applet layout..."
 	gsettings get org.cinnamon enabled-applets > "$BACKUP"
@@ -497,6 +508,87 @@ PY
 		done
 	else
 		warn "*** Cinnamenu settings file not found under $SPICES_DIR; skipping icon/caption customization"
+	fi
+
+	info "*** Resolving Grouped Window List settings files..."
+	readarray -d '' GROUPED_SETTINGS_FILES < <(find "$GROUPED_SPICES_DIR" -maxdepth 1 -type f -name '*.json' -print0 2>/dev/null)
+
+	if [ "${#GROUPED_SETTINGS_FILES[@]}" -gt 0 ]; then
+		info "*** Pinning launchers in Grouped Window List..."
+		for GROUPED_SETTINGS_FILE in "${GROUPED_SETTINGS_FILES[@]}"; do
+			cp -a "$GROUPED_SETTINGS_FILE" "$GROUPED_SETTINGS_FILE.bak"
+			python3 - "$GROUPED_SETTINGS_FILE" "${GROUPED_WINDOW_PINNED_LAUNCHERS[@]}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+configured_launchers = sys.argv[2:]
+settings = json.loads(path.read_text(encoding="utf-8"))
+
+desktop_dirs = [
+    Path.home() / ".local/share/applications",
+    Path("/usr/share/applications"),
+    Path.home() / ".local/share/flatpak/exports/share/applications",
+    Path("/var/lib/flatpak/exports/share/applications"),
+]
+available_desktop_files = {
+    entry.name
+    for desktop_dir in desktop_dirs
+    if desktop_dir.is_dir()
+    for entry in desktop_dir.glob("*.desktop")
+}
+
+candidate_map = {
+    "drawio.desktop": ["drawio.desktop", "com.jgraph.drawio.desktop", "com.jgraph.drawio.desktop:flatpak"],
+    "code.desktop": ["code.desktop", "com.microsoft.VSCode.desktop"],
+    "brave-browser.desktop": ["brave-browser.desktop", "com.brave.Browser.desktop:flatpak", "com.brave.Browser.desktop"],
+    "com.github.IsmaelMartinez.teams_for_linux.desktop:flatpak": [
+        "com.github.IsmaelMartinez.teams_for_linux.desktop:flatpak",
+        "com.github.IsmaelMartinez.teams_for_linux.desktop",
+    ],
+}
+
+if not configured_launchers:
+    configured_launchers = [
+        "libreoffice-writer.desktop",
+        "libreoffice-calc.desktop",
+        "libreoffice-impress.desktop",
+        "drawio.desktop",
+        "code.desktop",
+        "brave-browser.desktop",
+        "com.github.IsmaelMartinez.teams_for_linux.desktop:flatpak",
+    ]
+
+resolved_required = []
+for launcher_id in configured_launchers:
+    candidates = candidate_map.get(launcher_id, [launcher_id])
+    selected = None
+    for candidate in candidates:
+        desktop_name = candidate.removesuffix(":flatpak")
+        if desktop_name in available_desktop_files:
+            selected = candidate
+            break
+    resolved_required.append(selected or launcher_id)
+
+entry = settings.get("pinned-apps")
+if isinstance(entry, dict) and "value" in entry and isinstance(entry["value"], list):
+    current = [item for item in entry["value"] if item not in resolved_required]
+    entry["value"] = [*resolved_required, *current]
+elif isinstance(entry, list):
+    current = [item for item in entry if item not in resolved_required]
+    settings["pinned-apps"] = [*resolved_required, *current]
+else:
+    settings["pinned-apps"] = {"value": resolved_required}
+
+path.write_text(
+    json.dumps(settings, indent=4, ensure_ascii=False) + "\n",
+    encoding="utf-8",
+)
+PY
+		done
+	else
+		warn "*** Grouped Window List settings file not found under $GROUPED_SPICES_DIR; skipping launcher pinning"
 	fi
 
 	FILE="sound150@claudiux/metadata.json"
