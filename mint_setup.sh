@@ -1,7 +1,7 @@
 #!/bin/bash
 #-------------------------------------------------------------
 # Linux Mint setup script by Skatterbrainz
-# version: 1.17.0, 10/24/2026
+# version: 1.18.0, 10/24/2026
 #-------------------------------------------------------------
 # To invoke this from a terminal using wget or curl obtain the URL from the "raw" view of this script:
 # wget -O /tmp/mint_setup.sh <URL> && /tmp/mint_setup.sh
@@ -213,12 +213,14 @@ fi
 
 log "Starting system setup..."
 
-detect_virtualbox_guest() {
+VIRTUAL_GUEST_TYPE="none"
+detect_virtual_guest() {
 	local detected=""
 
 	if command -v systemd-detect-virt >/dev/null 2>&1; then
 		detected="$(systemd-detect-virt 2>/dev/null || true)"
-		if [ "$detected" = "oracle" ]; then
+		if systemd-detect-virt --vm --quiet 2>/dev/null; then
+			VIRTUAL_GUEST_TYPE="$detected"
 			return 0
 		fi
 	fi
@@ -228,7 +230,8 @@ detect_virtualbox_guest() {
 		"/sys/class/dmi/id/product_version" \
 		"/sys/class/dmi/id/sys_vendor" \
 		"/sys/class/dmi/id/board_vendor"; do
-		if [ -r "$dmi_file" ] && grep -Eqi 'virtualbox|innotek|oracle vm' "$dmi_file"; then
+		if [ -r "$dmi_file" ] && grep -Eqi 'virtualbox|innotek|oracle vm|vmware|kvm|qemu|xen|hyper-v|microsoft corporation|parallels|bhyve|bochs|rhev' "$dmi_file"; then
+			VIRTUAL_GUEST_TYPE="dmi"
 			return 0
 		fi
 	done
@@ -236,9 +239,9 @@ detect_virtualbox_guest() {
 	return 1
 }
 
-if detect_virtualbox_guest; then
+if detect_virtual_guest; then
 	if [ "$INSTALL_VIRTUALBOX" = true ]; then
-		warn "*** VirtualBox guest detected; disabling VirtualBox host install and dependent integrations"
+		warn "*** Virtual machine guest detected ($VIRTUAL_GUEST_TYPE); disabling VirtualBox host install and dependent integrations"
 	fi
 	INSTALL_VIRTUALBOX=false
 	INSTALL_APPLET_VBOX=false
