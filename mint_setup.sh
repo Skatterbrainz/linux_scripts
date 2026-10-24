@@ -1,23 +1,84 @@
 #!/bin/bash
 #-------------------------------------------------------------
 # Linux Mint setup script by Skatterbrainz
-# version: 1.9.2, 10/23/2026
+# version: 1.10.0, 10/23/2026
 #-------------------------------------------------------------
 # To invoke this from a terminal using wget or curl:
 # wget -O /tmp/mint_setup.sh <URL> && /tmp/mint_setup.sh
 #-------------------------------------------------------------
+INSTALL_BRAVE=true
+INSTALL_VSCODE=true
+INSTALL_POWERSHELL=true
+INSTALL_VIRTUALBOX=true
+INSTALL_APPLET_VBOX=true
+INSTALL_ARTCRAFT=true
+ENABLE_FIREWALL=true
+INSTALL_APPLETS=true
+INSTALL_EXTENSIONS=true
+INSTALL_WALLPAPER=true
+CONFIGURE_PANEL=true
+# Cinnamenu icon can be a theme icon name ("cinnamon-symbolic") or an absolute image path.
+CINNAMENU_ICON="cinnamon-symbolic"
+
+declare -a aptpackages=(
+	"git"
+	"gh"
+	"adwaita-icon-theme"
+	"glogg"
+	"kcolorchooser"
+	"kpat"
+	"nala"
+	"shutter"
+	"yad"
+	"yt-dlp"
+	"cargo"
+	"puddletag"
+	"jq"
+	"smartmontools"
+	"gsmartcontrol"
+)
+
+declare -a flatpak_apps=(
+	"com.bitwarden.desktop"
+	"com-github.hluk.copyq"
+	"org.gimp.GIMP"
+	"org.gtk.Gtk3theme.Adapta-Nokto"
+	"org.gnome.Papers"
+	"org.gtk.Gtk3theme.Mint-Y-Dark"
+	"org.gtk.Gtk3theme.Mint-Y-Dark-Blue"
+	"org.localsend.localsend_app"
+	"org.qbittorrent.qBittorrent"
+	"org.nickvision.tubeconverter"
+	"com.github.IsmaelMartinez.teams_for_linux"
+	"org.kde.kdenlive"
+	"org.kde.kleopatra"
+	"md.obsidian.Obsidian"
+	"com.github.wwmm.easyeffects"
+	"com.getpostman.Postman"
+	"io.github.shiftey.Desktop"
+)
+
+WALLPAPER_URL="https://raw.githubusercontent.com/Skatterbrainz/Garage/refs/heads/master/qYeaEQC-water-droplets-wallpaper.jpg"
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+WALLPAPER="$WALLPAPER_DIR/qYeaEQC-water-droplets-wallpaper.jpg"
+ARTCRAFT_URI="https://github.com/storytold/craft-launcher/releases/download/v0.6.1/artcraft-launcher-0.6.1-linux-x86_64.AppImage"
+ARTCRAFT_PATH="$HOME/Applications/$(basename "$ARTCRAFT_URI")"
+mkdir -p "$HOME/Applications"
+
+#-------------------------------------------------------------
+# Color codes and logging functions
+#-------------------------------------------------------------
+
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 CYAN='\033[0;36m'
 YELLOW='\033[0;33m'
 PURPLE='\033[0;35m'
 NC='\033[0m' # No Color
-WALLPAPER_URL="https://raw.githubusercontent.com/Skatterbrainz/Garage/refs/heads/master/qYeaEQC-water-droplets-wallpaper.jpg"
-WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
-WALLPAPER="$WALLPAPER_DIR/qYeaEQC-water-droplets-wallpaper.jpg"
-ARTCRAFT_URI="https://github.com/storytold/craft-launcher/releases/download/v0.6.1/artcraft-launcher-0.6.1-linux-x86_64.AppImage"
-ARTCRAFT_PATH="$HOME/AppImages/$(basename "$ARTCRAFT_URI")"
-mkdir -p "$HOME/AppImages"
+
+#-------------------------------------------------------------
+# Logging functions for different message levels
+#-------------------------------------------------------------
 
 log() {
 	echo -e "${GREEN}[$(date '+%Y-%m-%d %H:%M:%S')]${NC} $1"
@@ -104,7 +165,9 @@ dedupe_nala_sources() {
 	sudo mv "$tmp_file" "$nala_sources_file"
 }
 
+#-------------------------------------------------------------
 # Check if running as root
+#-------------------------------------------------------------
 if [[ $EUID -eq 0 ]]; then
    error "This script should not be run as root"
 fi
@@ -137,24 +200,6 @@ safe_apt_update
 ## Apt packages 
 #-------------------------------------------------------------
 
-declare -a aptpackages=(
-	"git"
-	"gh"
-	"adwaita-icon-theme"
-	"glogg"
-	"kcolorchooser"
-	"kpat"
-	"nala"
-	"shutter"
-	"yad"
-	"yt-dlp"
-	"cargo"
-	"puddletag"
-	"jq"
-	"smartmontools"
-	"gsmartcontrol"
-)
-
 info "*** Installing apt package set..."
 sudo nala install -y "${aptpackages[@]}" < /dev/null
 
@@ -162,129 +207,88 @@ sudo nala install -y "${aptpackages[@]}" < /dev/null
 ## Brave Browser
 #-------------------------------------------------------------
 
-FILE="/usr/bin/brave-browser"
-if [ -f "$FILE" ]; then
-	log "*** Brave Browser is already installed"
-else
-	info "*** Installing Brave Browser..."
-	sudo DEBIAN_FRONTEND=noninteractive apt install curl ca-certificates -y < /dev/null
-	sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
-	sudo curl -fsSLo /etc/apt/sources.list.d/brave-browser-release.sources https://brave-browser-apt-release.s3.brave.com/brave-browser.sources
-	safe_apt_update
-	sudo apt install brave-browser -y < /dev/null
-	#curl -fsS https://dl.brave.com/install.sh | bash
+if [ "$INSTALL_BRAVE" = true ]; then
+	FILE="/usr/bin/brave-browser"
+	if [ -f "$FILE" ]; then
+		log "*** Brave Browser is already installed"
+	else
+		info "*** Installing Brave Browser..."
+		sudo DEBIAN_FRONTEND=noninteractive apt install curl ca-certificates -y < /dev/null
+		sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
+		sudo curl -fsSLo /etc/apt/sources.list.d/brave-browser-release.sources https://brave-browser-apt-release.s3.brave.com/brave-browser.sources
+		safe_apt_update
+		sudo apt install brave-browser -y < /dev/null
+		#curl -fsS https://dl.brave.com/install.sh | bash
+	fi
 fi
 
-#-------------------------------------------------------------
-## FastFetch
-#-------------------------------------------------------------
 cd ~/Downloads
-
-# FILE="/bin/fastfetch"
-# if [ -f "$FILE" ]; then
-# 	log "*** FastFetch is already installed"
-# else
-# 	info "*** Installing FastFetch..."
-# 	sudo add-apt-repository ppa:zhangsongcui3371/fastfetch -y
-# 	safe_apt_update
-# 	sudo nala install fastfetch -y
-# fi
 
 #-------------------------------------------------------------
 ## PowerShell 7.6.8 (may need to update often)
 #-------------------------------------------------------------
 
-FILE="/opt/microsoft/powershell/7/pwsh"
-if [ -f "$FILE" ]; then
-	log "*** PowerShell 7 is already installed"
-else
-	info "*** Installing PowerShell 7.6.8..."
-	sudo DEBIAN_FRONTEND=noninteractive apt-get install -y wget < /dev/null
-	wget https://github.com/PowerShell/PowerShell/releases/download/v7.6.8/powershell-lts_7.6.8-1.deb_amd64.deb
-	sudo DEBIAN_FRONTEND=noninteractive dpkg -i powershell-lts_7.6.8-1.deb_amd64.deb < /dev/null
-	sudo DEBIAN_FRONTEND=noninteractive apt-get install -f < /dev/null
-	rm powershell-lts_7.6.8-1.deb_amd64.deb
+if [ "$INSTALL_POWERSHELL" = true ]; then
+	FILE="/opt/microsoft/powershell/7/pwsh"
+	if [ -f "$FILE" ]; then
+		log "*** PowerShell 7 is already installed"
+	else
+		info "*** Installing PowerShell 7.6.8..."
+		sudo DEBIAN_FRONTEND=noninteractive apt-get install -y wget < /dev/null
+		wget https://github.com/PowerShell/PowerShell/releases/download/v7.6.8/powershell-lts_7.6.8-1.deb_amd64.deb
+		sudo DEBIAN_FRONTEND=noninteractive dpkg -i powershell-lts_7.6.8-1.deb_amd64.deb < /dev/null
+		sudo DEBIAN_FRONTEND=noninteractive apt-get install -f < /dev/null
+		rm powershell-lts_7.6.8-1.deb_amd64.deb
+	fi
 fi
 
 #-------------------------------------------------------------
 ## Visual Studio Code 1.104.0 (may need to update often)
 #-------------------------------------------------------------
 
-FILE="/usr/share/code/code"
-if [ -f "$FILE" ]; then
-	log "*** Visual Studio Code is already installed"
-else
-	info "*** Installing Visual Studio Code from Microsoft apt repository..."
-	sudo DEBIAN_FRONTEND=noninteractive apt install -y curl ca-certificates gnupg < /dev/null
-	sudo install -d -m 0755 /etc/apt/keyrings
-	curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
-		| gpg --dearmor \
-		| sudo tee /etc/apt/keyrings/packages.microsoft.gpg > /dev/null
-	sudo chmod a+r /etc/apt/keyrings/packages.microsoft.gpg
-	echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" \
-		| sudo tee /etc/apt/sources.list.d/vscode.list > /dev/null
-	safe_apt_update
-	sudo DEBIAN_FRONTEND=noninteractive apt install -y code < /dev/null
+if [ "$INSTALL_VSCODE" = true ]; then
+	FILE="/usr/share/code/code"
+	if [ -f "$FILE" ]; then
+		log "*** Visual Studio Code is already installed"
+	else
+		info "*** Installing Visual Studio Code from Microsoft apt repository..."
+		sudo DEBIAN_FRONTEND=noninteractive apt install -y curl ca-certificates gnupg < /dev/null
+		sudo install -d -m 0755 /etc/apt/keyrings
+		curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
+			| gpg --dearmor \
+			| sudo tee /etc/apt/keyrings/packages.microsoft.gpg > /dev/null
+		sudo chmod a+r /etc/apt/keyrings/packages.microsoft.gpg
+		echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" \
+			| sudo tee /etc/apt/sources.list.d/vscode.list > /dev/null
+		safe_apt_update
+		sudo DEBIAN_FRONTEND=noninteractive apt install -y code < /dev/null
+	fi
 fi
 
 #-------------------------------------------------------------
 ## VirtualBox 7.2.20 (may need to update often)
 #-------------------------------------------------------------
 
-# Skip this if the machine is a VM guest running inside VirtualBox
-if systemd-detect-virt -q && [ "$(systemd-detect-virt)" = "oracle" ]; then
-	log "*** Running inside VirtualBox VM, skipping VirtualBox installation"
-else
-	FILE="/bin/VBox"
-	if [ -f "$FILE" ]; then
-		log "*** VirtualBox 7 is already installed"
+if [ "$INSTALL_VIRTUALBOX" = true ]; then
+	# Skip this if the machine is a VM guest running inside VirtualBox
+	if systemd-detect-virt -q && [ "$(systemd-detect-virt)" = "oracle" ]; then
+		log "*** Running inside VirtualBox VM, skipping VirtualBox installation"
 	else
-		info "*** Installing VirtualBox 7.2.20 ..."
-		wget https://download.virtualbox.org/virtualbox/7.2.20/virtualbox-7.2_7.2.20-175154~Ubuntu~noble_amd64.deb
-		sudo DEBIAN_FRONTEND=noninteractive apt install ./virtualbox-7.2_7.2.20-175154~Ubuntu~noble_amd64.deb -y < /dev/null
-		rm virtualbox-7.2_7.2.20-175154~Ubuntu~noble_amd64.deb
+		FILE="/bin/VBox"
+		if [ -f "$FILE" ]; then
+			log "*** VirtualBox 7 is already installed"
+		else
+			info "*** Installing VirtualBox 7.2.20 ..."
+			wget https://download.virtualbox.org/virtualbox/7.2.20/virtualbox-7.2_7.2.20-175154~Ubuntu~noble_amd64.deb
+			sudo DEBIAN_FRONTEND=noninteractive apt install ./virtualbox-7.2_7.2.20-175154~Ubuntu~noble_amd64.deb -y < /dev/null
+			rm virtualbox-7.2_7.2.20-175154~Ubuntu~noble_amd64.deb
+		fi
 	fi
 fi
 
 #-------------------------------------------------------------
-## Warp Terminal (see https://www.warp.dev/download)
-#-------------------------------------------------------------
-
-# FILE="/usr/bin/warp-terminal"
-# if [ -f "$FILE" ]; then
-# 	log "*** Warp Terminal is already installed"
-# else
-# 	info "*** Installing Warp Terminal..."
-# 	sudo apt install -y wget
-# 	wget https://releases.warp.dev/stable/v0.2026.01.21.08.14.stable_03/warp-terminal_0.2026.01.21.08.14.stable.03_amd64.deb
-# 	sudo dpkg -i ./warp-terminal_0.2026.01.21.08.14.stable.03_amd64.deb
-# 	sudo apt-get install -f
-# 	rm ./warp-terminal_0.2026.01.21.08.14.stable.03_amd64.deb
-# fi
-
-#-------------------------------------------------------------
 ## Flatpak applications
 #-------------------------------------------------------------
-
-declare -a flatpak_apps=(
-	"com.bitwarden.desktop"
-	"com-github.hluk.copyq"
-	"org.gimp.GIMP"
-	"org.gtk.Gtk3theme.Adapta-Nokto"
-	"org.gnome.Papers"
-	"org.gtk.Gtk3theme.Mint-Y-Dark"
-	"org.gtk.Gtk3theme.Mint-Y-Dark-Blue"
-	"org.localsend.localsend_app"
-	"org.qbittorrent.qBittorrent"
-	"org.nickvision.tubeconverter"
-	"com.github.IsmaelMartinez.teams_for_linux"
-	"org.kde.kdenlive"
-	"org.kde.kleopatra"
-	"md.obsidian.Obsidian"
-	"com.github.wwmm.easyeffects"
-	"com.getpostman.Postman"
-	"io.github.shiftey.Desktop"
-)
 
 for app in "${flatpak_apps[@]}"; do
 	if flatpak list | grep -q "$app"; then
@@ -300,12 +304,15 @@ done
 ## System Configuration changes
 #-------------------------------------------------------------
 
-# check if firewall is enabled
-if sudo ufw status | grep -q "Status: active"; then
-	log "*** Firewall is already enabled"
-else
-	info "*** Firewall is not enabled, enabling now..."
-	info "*** Enabling firewall..."
+if [ "$ENABLE_FIREWALL" = true ]; then
+	# check if firewall is enabled
+	if sudo ufw status | grep -q "Status: active"; then
+		log "*** Firewall is already enabled"
+	else
+		info "*** Firewall is not enabled, enabling now..."
+		sudo ufw enable
+		info "*** Enabling firewall..."
+	fi
 fi
 
 info "*** Checking for updates..."
@@ -346,52 +353,55 @@ fi
 ## Applets
 #-------------------------------------------------------------
 
-log "*** Setting applets..."
-cd ~/.local/share/cinnamon/applets/
-FILE="weather@mockturtl/metadata.json"
-if [ -f "$FILE" ]; then
-	log "*** Weather applet already installed"
-else
-	info "*** Downloading applet: Weather..."
-	wget https://cinnamon-spices.linuxmint.com/files/applets/weather@mockturtl.zip && unzip weather@mockturtl.zip
-	rm weather@mockturtl.zip*
-fi
-
-VFILE="/usr/bin/vboxmanage"
-if [ -f "$VFILE" ]; then
-	FILE="vboxlauncher@mockturtl/metadata.json"
+if [ "$INSTALL_APPLETS" = true ]; then
+	info "*** Installing Cinnamon Applets..."
+	cd ~/.local/share/cinnamon/applets/
+	FILE="weather@mockturtl/metadata.json"
 	if [ -f "$FILE" ]; then
-		log
+		log "*** Weather applet already installed"
 	else
-		info "*** Downloading applet: VBox Launcher..."
-		wget https://cinnamon-spices.linuxmint.com/files/applets/vboxlauncher@mockturtl.zip && unzip vboxlauncher@mockturtl.zip
-		rm vboxlauncher@mockturtl.zip*
+		info "*** Downloading applet: Weather..."
+		wget https://cinnamon-spices.linuxmint.com/files/applets/weather@mockturtl.zip && unzip weather@mockturtl.zip
+		rm weather@mockturtl.zip*
 	fi
-else
-	info "*** VBoxManage not found, installing VirtualBox applet..."
-	sudo DEBIAN_FRONTEND=noninteractive apt install -y virtualbox < /dev/null
-fi
 
-FILE="Cinnamenu@json/metadata.json"
-if [ -f "$FILE" ]; then
-	log "*** Cinnamenu already installed"
-else
-	info "*** Downloading Cinnamenu..."
-	wget https://cinnamon-spices.linuxmint.com/files/applets/Cinnamenu@json.zip && unzip Cinnamenu@json.zip
-	rm Cinnamenu@json.zip*
-fi
+	if [ "$INSTALL_VIRTUALBOX" = true ]; then
+		VFILE="/usr/bin/vboxmanage"
+		if [ -f "$VFILE" ]; then
+			FILE="vboxlauncher@mockturtl/metadata.json"
+			if [ -f "$FILE" ]; then
+				log "*** VBox Launcher applet already installed"
+			else
+				info "*** Downloading applet: VBox Launcher..."
+				wget https://cinnamon-spices.linuxmint.com/files/applets/vboxlauncher@mockturtl.zip && unzip vboxlauncher@mockturtl.zip
+				rm vboxlauncher@mockturtl.zip*
+			fi
+		else
+			info "*** VBoxManage not found, installing VirtualBox applet..."
+			sudo DEBIAN_FRONTEND=noninteractive apt install -y virtualbox < /dev/null
+		fi
+	fi
 
-UUID="Cinnamenu@json"
-GROUPED_WINDOWS_UUID="grouped-window-list@cinnamon.org"
-BACKUP="$HOME/cinnamon-enabled-applets.backup"
-SPICES_DIR="$HOME/.config/cinnamon/spices/$UUID"
+	FILE="Cinnamenu@json/metadata.json"
+	if [ -f "$FILE" ]; then
+		log "*** Cinnamenu already installed"
+	else
+		info "*** Downloading Cinnamenu..."
+		wget https://cinnamon-spices.linuxmint.com/files/applets/Cinnamenu@json.zip && unzip Cinnamenu@json.zip
+		rm Cinnamenu@json.zip*
+	fi
 
-info "*** Backing up current Cinnamon panel applet layout..."
-gsettings get org.cinnamon enabled-applets > "$BACKUP"
+	UUID="Cinnamenu@json"
+	GROUPED_WINDOWS_UUID="grouped-window-list@cinnamon.org"
+	BACKUP="$HOME/cinnamon-enabled-applets.backup"
+	SPICES_DIR="$HOME/.config/cinnamon/spices/$UUID"
 
-info "*** Updating panel layout: center=Cinnamenu+Grouped Windows List, others=right..."
-CURRENT_APPLETS="$(gsettings get org.cinnamon enabled-applets)"
-UPDATED_APPLETS="$(python3 - "$CURRENT_APPLETS" "$UUID" "$GROUPED_WINDOWS_UUID" <<'PY'
+	info "*** Backing up current Cinnamon panel applet layout..."
+	gsettings get org.cinnamon enabled-applets > "$BACKUP"
+
+	info "*** Updating panel layout: center=Cinnamenu+Grouped Windows List, others=right..."
+	CURRENT_APPLETS="$(gsettings get org.cinnamon enabled-applets)"
+	UPDATED_APPLETS="$(python3 - "$CURRENT_APPLETS" "$UUID" "$GROUPED_WINDOWS_UUID" <<'PY'
 import ast
 import sys
 
@@ -448,42 +458,22 @@ for _panel, uuid, suffix in other_applets:
 print(repr(result))
 PY
 )"
-gsettings set org.cinnamon enabled-applets "$UPDATED_APPLETS"
+	gsettings set org.cinnamon enabled-applets "$UPDATED_APPLETS"
 
-info "*** Resolving active Cinnamenu settings file..."
-INSTANCE_ID="$(python3 - "$(gsettings get org.cinnamon enabled-applets)" "$UUID" <<'PY'
-import ast
-import sys
+	info "*** Resolving Cinnamenu settings files..."
+	readarray -d '' SETTINGS_FILES < <(find "$SPICES_DIR" -maxdepth 1 -type f -name '*.json' -print0 2>/dev/null)
 
-items = ast.literal_eval(sys.argv[1])
-uuid = sys.argv[2]
-
-for item in items:
-    fields = item.split(":")
-    if len(fields) >= 5 and fields[3] == uuid:
-        print(fields[4])
-        break
-PY
-)"
-
-SETTINGS_FILE=""
-if [[ -n "$INSTANCE_ID" && -f "$SPICES_DIR/$INSTANCE_ID.json" ]]; then
-	SETTINGS_FILE="$SPICES_DIR/$INSTANCE_ID.json"
-elif [[ -d "$SPICES_DIR" ]]; then
-	SETTINGS_FILE="$(find "$SPICES_DIR" -maxdepth 1 -type f -name '*.json' -print -quit)"
-fi
-
-if [[ -n "$SETTINGS_FILE" ]]; then
-	info "*** Backing up Cinnamenu settings..."
-	cp -a "$SETTINGS_FILE" "$SETTINGS_FILE.bak"
-
-	info "*** Applying Cinnamenu icon and caption settings..."
-	python3 - "$SETTINGS_FILE" <<'PY'
+	if [ "${#SETTINGS_FILES[@]}" -gt 0 ]; then
+		info "*** Applying Cinnamenu icon and caption settings to all instances..."
+		for SETTINGS_FILE in "${SETTINGS_FILES[@]}"; do
+			cp -a "$SETTINGS_FILE" "$SETTINGS_FILE.bak"
+			python3 - "$SETTINGS_FILE" "$CINNAMENU_ICON" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 path = Path(sys.argv[1])
+menu_icon = sys.argv[2]
 settings = json.loads(path.read_text(encoding="utf-8"))
 
 def set_setting(key, value):
@@ -497,24 +487,26 @@ def set_setting(key, value):
 
 set_setting("menu-label", "")
 set_setting("menu-icon-custom", True)
-set_setting("menu-icon", "cinnamon-symbolic")
+set_setting("menu-icon", menu_icon)
 
 path.write_text(
     json.dumps(settings, indent=4, ensure_ascii=False) + "\n",
     encoding="utf-8",
 )
 PY
-else
-	warn "*** Cinnamenu settings file not found under $SPICES_DIR; skipping icon/caption customization"
-fi
+		done
+	else
+		warn "*** Cinnamenu settings file not found under $SPICES_DIR; skipping icon/caption customization"
+	fi
 
-FILE="sound150@claudiux/metadata.json"
-if [ -f "$FILE" ]; then
-	log "*** Enhanced Sound Applet already installed"
-else
-	info "*** Downloading Enhanced Sound Applet..."
-	wget https://cinnamon-spices.linuxmint.com/files/applets/sound150@claudiux.zip && unzip sound150@claudiux.zip
-	rm sound150@claudiux.zip*
+	FILE="sound150@claudiux/metadata.json"
+	if [ -f "$FILE" ]; then
+		log "*** Enhanced Sound Applet already installed"
+	else
+		info "*** Downloading Enhanced Sound Applet..."
+		wget https://cinnamon-spices.linuxmint.com/files/applets/sound150@claudiux.zip && unzip sound150@claudiux.zip
+		rm sound150@claudiux.zip*
+	fi
 fi
 
 #-------------------------------------------------------------
@@ -526,89 +518,58 @@ fi
 ## Extensions
 #-------------------------------------------------------------
 
-cd ~/.local/share/cinnamon/extensions/
-FILE="copy-path-to-clipboard@claudiux/metadata.json"
-if [ -f "$FILE" ]; then
-	log "*** Extension: copy-path-to-clipboard already installed"
-else
-	info "*** Downloading extension: copy-path-to-clipboard..."
-	wget https://cinnamon-spices.linuxmint.com/files/actions/copy-path-to-clipboard@claudiux.zip && unzip copy-path-to-clipboard@claudiux.zip
-	rm copy-path-to-clipboard@claudiux.zip*
+if [ "$INSTALL_EXTENSIONS" = true ]; then
+	log "*** Installing Cinnamon Extensions..."
+	cd ~/.local/share/cinnamon/extensions/
+	FILE="copy-path-to-clipboard@claudiux/metadata.json"
+	if [ -f "$FILE" ]; then
+		log "*** Extension: copy-path-to-clipboard already installed"
+	else
+		info "*** Downloading extension: copy-path-to-clipboard..."
+		wget https://cinnamon-spices.linuxmint.com/files/actions/copy-path-to-clipboard@claudiux.zip && unzip copy-path-to-clipboard@claudiux.zip
+		rm copy-path-to-clipboard@claudiux.zip*
+	fi
+
+	FILE="vbox@claudiux/metadata.json"
+	if [ -f "$FILE" ]; then
+		log "*** Extension: vbox already installed"
+	else
+		info "*** Downloading extension: vbox..."
+		wget https://cinnamon-spices.linuxmint.com/files/extensions/vbox@claudiux.zip && unzip vbox@claudiux.zip
+		rm vbox@claudiux.zip*
+	fi
 fi
 
 #-------------------------------------------------------------
-# Download wallpaper
+# Download wallpaper and set active
 #-------------------------------------------------------------
 
-step "Downloading wallpaper to $WALLPAPER"
-mkdir -p "$WALLPAPER_DIR"
-curl -fL --retry 2 "$WALLPAPER_URL" -o "$WALLPAPER"
-status "Wallpaper downloaded."
-
-# Set the downloaded wallpaper as the desktop background
-gsettings set org.cinnamon.desktop.background picture-uri "file://$WALLPAPER"
+if [ "$INSTALL_WALLPAPER" = true ]; then
+	step "Downloading wallpaper to $WALLPAPER"
+	mkdir -p "$WALLPAPER_DIR"
+	curl -fL --retry 2 "$WALLPAPER_URL" -o "$WALLPAPER"
+	status "Wallpaper downloaded."
+	# Set the downloaded wallpaper as the desktop background
+	gsettings set org.cinnamon.desktop.background picture-uri "file://$WALLPAPER"
+fi
 
 #-------------------------------------------------------------
 ## Additional Utilities and AppImages
 #-------------------------------------------------------------
 
-mkdir -p "$HOME/AppImages"
-
-if [ ! -f "$ARTCRAFT_PATH" ]; then
-	info "*** Downloading ArtCraft Launcher..."
-	curl -fL --retry 2 "$ARTCRAFT_URI" -o "$ARTCRAFT_PATH"
-	chmod +x "$ARTCRAFT_PATH"
+mkdir -p "$HOME/Applications"
+if [ "$INSTALL_ARTCRAFT" = true ]; then
+	if [ ! -f "$ARTCRAFT_PATH" ]; then
+		info "*** Downloading ArtCraft Launcher..."
+		curl -fL --retry 2 "$ARTCRAFT_URI" -o "$ARTCRAFT_PATH"
+		chmod +x "$ARTCRAFT_PATH"
+	fi
 fi
-export PATH="$HOME/AppImages:$PATH"
-
-# download and install WordCraft
-WORDCRAFT_URI="https://github.com/storytold/wordcraft/releases/download/v0.10.0/wordcraft-0.10.0-linux-x86_64.AppImage"
-WORDCRAFT_PATH="$HOME/AppImages/$(basename "$WORDCRAFT_URI")"
-if [ ! -f "$WORDCRAFT_PATH" ]; then
-	info "*** Downloading WordCraft..."
-	curl -fL --retry 2 "$WORDCRAFT_URI" -o "$WORDCRAFT_PATH"
-	chmod +x "$WORDCRAFT_PATH"
-fi
-
-# download and install PDFCraft
-PDFCRAFT_URI="https://github.com/storytold/pdfcraft/releases/download/v0.13.0/pdfcraft-0.13.0-linux-x86_64.AppImage"
-PDFCRAFT_PATH="$HOME/AppImages/$(basename "$PDFCRAFT_URI")"
-if [ ! -f "$PDFCRAFT_PATH" ]; then
-	info "*** Downloading PDFCraft..."
-	curl -fL --retry 2 "$PDFCRAFT_URI" -o "$PDFCRAFT_PATH"
-	chmod +x "$PDFCRAFT_PATH"
-fi
-
-# download and install GridCraft
-GRIDCRAFT_URI="https://github.com/storytold/gridcraft/releases/download/v0.11.1/gridcraft-0.11.1-linux-x86_64.AppImage"
-GRIDCRAFT_PATH="$HOME/AppImages/$(basename "$GRIDCRAFT_URI")"
-if [ ! -f "$GRIDCRAFT_PATH" ]; then
-	info "*** Downloading GridCraft..."
-	curl -fL --retry 2 "$GRIDCRAFT_URI" -o "$GRIDCRAFT_PATH"
-	chmod +x "$GRIDCRAFT_PATH"
-fi
-
-# download and install DeckCraft
-DECKCRAFT_URI="https://github.com/storytold/deckcraft/releases/download/v0.10.0/deckcraft-0.10.0-linux-x86_64.AppImage"
-DECKCRAFT_PATH="$HOME/AppImages/$(basename "$DECKCRAFT_URI")"
-if [ ! -f "$DECKCRAFT_PATH" ]; then
-	info "*** Downloading DeckCraft..."
-	curl -fL --retry 2 "$DECKCRAFT_URI" -o "$DECKCRAFT_PATH"
-	chmod +x "$DECKCRAFT_PATH"
-fi
-
-# download and install Draw.io
-# DRAWIO_URI="https://github.com/jgraph/drawio-desktop/releases/download/v32.5.5/drawio-x86_64-32.5.5.AppImage"
-# DRAWIO_PATH="$HOME/AppImages/$(basename "$DRAWIO_URI")"
-# if [ ! -f "$DRAWIO_PATH" ]; then
-# 	info "*** Downloading Draw.io..."
-# 	curl -fL --retry 2 "$DRAWIO_URI" -o "$DRAWIO_PATH"
-# 	chmod +x "$DRAWIO_PATH"
-# fi
+export PATH="$HOME/Applications:$PATH"
 
 if ! command -v drawio &> /dev/null; then
 	DRAWIO_URI="https://github.com/jgraph/drawio-desktop/releases/download/v32.5.5/drawio-amd64-32.5.5.deb"
-	DRAWIO_PATH="$HOME/AppImages/$(basename "$DRAWIO_URI")"
+	DRAWIO_PATH="$HOME/Applications/$(basename "$DRAWIO_URI")"
 	if [ ! -f "$DRAWIO_PATH" ]; then
 		info "*** Downloading Draw.io 32.5.5 ..."
 		curl -fL --retry 2 "$DRAWIO_URI" -o "$DRAWIO_PATH"
@@ -628,18 +589,19 @@ fi
 
 log "*** Applying system tweaks..."
 
-VFILE="/usr/bin/vboxmanage"
-if [ -f "$VFILE" ]; then
-	# Disable KVM modules to avoid VirtualBox conflicts
-	info "*** Disabling KVM modules to avoid VirtualBox conflicts..."
-sudo tee /etc/modprobe.d/blacklist-kvm.conf > /dev/null << 'EOF'
+if [ "$INSTALL_VBOX" = true ]; then
+	VFILE="/usr/bin/vboxmanage"
+	if [ -f "$VFILE" ]; then
+		# Disable KVM modules to avoid VirtualBox conflicts
+		info "*** Disabling KVM modules to avoid VirtualBox conflicts..."
+	sudo tee /etc/modprobe.d/blacklist-kvm.conf > /dev/null << 'EOF'
 blacklist kvm
 blacklist kvm_intel
 blacklist kvm_amd
 EOF
-
-	log "*** Disabling KVM modules..."
-	sudo update-initramfs -u
+		log "*** Disabling KVM modules..."
+		sudo update-initramfs -u
+	fi
 fi
 
 log "Setup is complete!. Please restart your system to apply all changes."
