@@ -1,7 +1,7 @@
 #!/bin/bash
 #-------------------------------------------------------------
 # Linux Mint setup script by Skatterbrainz
-# version: 1.14.0, 10/23/2026
+# version: 1.15.0, 10/23/2026
 #-------------------------------------------------------------
 # To invoke this from a terminal using wget or curl:
 # wget -O /tmp/mint_setup.sh <URL> && /tmp/mint_setup.sh
@@ -459,8 +459,10 @@ if [ "$INSTALL_APPLETS" = true ]; then
 	CALENDAR_UUID="calendar@cinnamon.org"
 	BACKUP="$HOME/cinnamon-enabled-applets.backup"
 	SPICES_DIR="$HOME/.config/cinnamon/spices/$UUID"
+	SPICES_DIR_ALT="$HOME/.cinnamon/configs/$UUID"
 	GROUPED_SPICES_DIR="$HOME/.config/cinnamon/spices/$GROUPED_WINDOWS_UUID"
 	CALENDAR_SPICES_DIR="$HOME/.config/cinnamon/spices/$CALENDAR_UUID"
+	CALENDAR_SPICES_DIR_ALT="$HOME/.cinnamon/configs/$CALENDAR_UUID"
 	CINNAMENU_INSTANCE_FALLBACK="$(
 		find "$SPICES_DIR" -maxdepth 1 -type f -name '*.json' -printf '%f\n' 2>/dev/null \
 			| sed 's/\.json$//' \
@@ -545,7 +547,58 @@ PY
 	gsettings set org.cinnamon enabled-applets "$UPDATED_APPLETS"
 
 	info "*** Resolving Cinnamenu settings files..."
-	readarray -d '' SETTINGS_FILES < <(find "$SPICES_DIR" -maxdepth 1 -type f -name '*.json' -print0 2>/dev/null)
+	readarray -t CINNAMENU_INSTANCE_IDS < <(python3 - "$UPDATED_APPLETS" "$UUID" <<'PY'
+import ast
+import sys
+
+items = ast.literal_eval(sys.argv[1])
+uuid = sys.argv[2]
+seen = set()
+
+for item in items:
+    fields = item.split(":")
+    if len(fields) >= 5 and fields[3] == uuid:
+        instance_id = fields[4]
+        if instance_id not in seen:
+            print(instance_id)
+            seen.add(instance_id)
+PY
+)
+	SETTINGS_FILES=()
+	declare -A CINNAMENU_SETTINGS_FILE_SET=()
+
+	mkdir -p "$SPICES_DIR"
+	for instance_id in "${CINNAMENU_INSTANCE_IDS[@]}"; do
+		[ -n "$instance_id" ] || continue
+		found_instance_file=false
+		for settings_dir in "$SPICES_DIR" "$SPICES_DIR_ALT"; do
+			settings_file="$settings_dir/$instance_id.json"
+			if [ -f "$settings_file" ]; then
+				if [ -z "${CINNAMENU_SETTINGS_FILE_SET[$settings_file]+x}" ]; then
+					SETTINGS_FILES+=("$settings_file")
+					CINNAMENU_SETTINGS_FILE_SET["$settings_file"]=1
+				fi
+				found_instance_file=true
+			fi
+		done
+
+		if [ "$found_instance_file" = false ]; then
+			settings_file="$SPICES_DIR/$instance_id.json"
+			printf '{}\n' > "$settings_file"
+			SETTINGS_FILES+=("$settings_file")
+			CINNAMENU_SETTINGS_FILE_SET["$settings_file"]=1
+			info "*** Created missing Cinnamenu settings file: $settings_file"
+		fi
+	done
+
+	for settings_dir in "$SPICES_DIR" "$SPICES_DIR_ALT"; do
+		while IFS= read -r -d '' settings_file; do
+			if [ -z "${CINNAMENU_SETTINGS_FILE_SET[$settings_file]+x}" ]; then
+				SETTINGS_FILES+=("$settings_file")
+				CINNAMENU_SETTINGS_FILE_SET["$settings_file"]=1
+			fi
+		done < <(find "$settings_dir" -maxdepth 1 -type f -name '*.json' -print0 2>/dev/null)
+	done
 
 	if [ "${#SETTINGS_FILES[@]}" -gt 0 ]; then
 		info "*** Applying Cinnamenu icon and caption settings to all instances..."
@@ -561,9 +614,7 @@ menu_icon = sys.argv[2]
 settings = json.loads(path.read_text(encoding="utf-8"))
 
 def set_setting(key, value):
-    if key not in settings:
-        return
-    entry = settings[key]
+    entry = settings.get(key)
     if isinstance(entry, dict) and "value" in entry:
         entry["value"] = value
     else:
@@ -580,7 +631,7 @@ path.write_text(
 PY
 		done
 	else
-		warn "*** Cinnamenu settings file not found under $SPICES_DIR; skipping icon/caption customization"
+		warn "*** Cinnamenu settings files not found under $SPICES_DIR or $SPICES_DIR_ALT; skipping icon/caption customization"
 	fi
 
 	info "*** Resolving Grouped Window List settings files..."
@@ -666,7 +717,58 @@ PY
 
 	if [ "$CALENDAR_USE_CUSTOM_FORMAT" = true ]; then
 		info "*** Resolving Calendar applet settings files..."
-		readarray -d '' CALENDAR_SETTINGS_FILES < <(find "$CALENDAR_SPICES_DIR" -maxdepth 1 -type f -name '*.json' -print0 2>/dev/null)
+		readarray -t CALENDAR_INSTANCE_IDS < <(python3 - "$UPDATED_APPLETS" "$CALENDAR_UUID" <<'PY'
+import ast
+import sys
+
+items = ast.literal_eval(sys.argv[1])
+uuid = sys.argv[2]
+seen = set()
+
+for item in items:
+    fields = item.split(":")
+    if len(fields) >= 5 and fields[3] == uuid:
+        instance_id = fields[4]
+        if instance_id not in seen:
+            print(instance_id)
+            seen.add(instance_id)
+PY
+)
+		CALENDAR_SETTINGS_FILES=()
+		declare -A CALENDAR_SETTINGS_FILE_SET=()
+
+		mkdir -p "$CALENDAR_SPICES_DIR"
+		for instance_id in "${CALENDAR_INSTANCE_IDS[@]}"; do
+			[ -n "$instance_id" ] || continue
+			found_instance_file=false
+			for settings_dir in "$CALENDAR_SPICES_DIR" "$CALENDAR_SPICES_DIR_ALT"; do
+				settings_file="$settings_dir/$instance_id.json"
+				if [ -f "$settings_file" ]; then
+					if [ -z "${CALENDAR_SETTINGS_FILE_SET[$settings_file]+x}" ]; then
+						CALENDAR_SETTINGS_FILES+=("$settings_file")
+						CALENDAR_SETTINGS_FILE_SET["$settings_file"]=1
+					fi
+					found_instance_file=true
+				fi
+			done
+
+			if [ "$found_instance_file" = false ]; then
+				settings_file="$CALENDAR_SPICES_DIR/$instance_id.json"
+				printf '{}\n' > "$settings_file"
+				CALENDAR_SETTINGS_FILES+=("$settings_file")
+				CALENDAR_SETTINGS_FILE_SET["$settings_file"]=1
+				info "*** Created missing Calendar settings file: $settings_file"
+			fi
+		done
+
+		for settings_dir in "$CALENDAR_SPICES_DIR" "$CALENDAR_SPICES_DIR_ALT"; do
+			while IFS= read -r -d '' settings_file; do
+				if [ -z "${CALENDAR_SETTINGS_FILE_SET[$settings_file]+x}" ]; then
+					CALENDAR_SETTINGS_FILES+=("$settings_file")
+					CALENDAR_SETTINGS_FILE_SET["$settings_file"]=1
+				fi
+			done < <(find "$settings_dir" -maxdepth 1 -type f -name '*.json' -print0 2>/dev/null)
+		done
 
 		if [ "${#CALENDAR_SETTINGS_FILES[@]}" -gt 0 ]; then
 			info "*** Enabling custom date format in Calendar applet..."
@@ -705,7 +807,7 @@ path.write_text(
 PY
 			done
 		else
-			warn "*** Calendar settings file not found under $CALENDAR_SPICES_DIR; skipping custom date format toggle"
+			warn "*** Calendar settings files not found under $CALENDAR_SPICES_DIR or $CALENDAR_SPICES_DIR_ALT; skipping custom date format toggle"
 		fi
 	fi
 
