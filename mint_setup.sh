@@ -1,7 +1,7 @@
 #!/bin/bash
 #-------------------------------------------------------------
 # Linux Mint setup script by Skatterbrainz
-# version: 1.16.0, 10/23/2026
+# version: 1.17.0, 10/24/2026
 #-------------------------------------------------------------
 # To invoke this from a terminal using wget or curl obtain the URL from the "raw" view of this script:
 # wget -O /tmp/mint_setup.sh <URL> && /tmp/mint_setup.sh
@@ -20,6 +20,7 @@ INSTALL_APPLETS=true
 INSTALL_EXTENSIONS=true
 INSTALL_WALLPAPER=true
 CONFIGURE_PANEL=true
+CONFIGURE_NEMO=true
 # Cinnamenu icon can be a theme icon name ("cinnamon-symbolic") or an absolute image path.
 CINNAMENU_ICON="cinnamon-symbolic"
 # Calendar applet: enable "Use a custom date format".
@@ -85,6 +86,7 @@ ARTCRAFT_URI="https://github.com/storytold/craft-launcher/releases/download/v0.7
 ARTCRAFT_PATH="$HOME/Applications/$(basename "$ARTCRAFT_URI")"
 ARTCRAFT_ONCE_SCRIPT="$HOME/.local/bin/mintsetup-launch-artcraft-once.sh"
 ARTCRAFT_ONCE_DESKTOP="$HOME/.config/autostart/mintsetup-artcraft-once.desktop"
+ARTCRAFT_ONCE_DONE_MARKER="$HOME/.local/state/mintsetup/artcraft-once-launch.done"
 mkdir -p "$HOME/Applications"
 
 LOG_FILE="$HOME/mintsetup.log"
@@ -420,6 +422,21 @@ else
 fi
 
 #-------------------------------------------------------------
+## Nemo File Manager
+#-------------------------------------------------------------
+
+if [ "$CONFIGURE_NEMO" = true ]; then
+	info "*** Applying Nemo file manager preferences..."
+	gsettings set org.nemo.preferences show-hidden-files true
+	gsettings set org.nemo.list-view default-visible-columns "['name', 'size', 'type', 'date_modified', 'date_created', 'owner', 'permissions']"
+	gsettings set org.nemo.preferences show-new-folder-icon-toolbar true
+	gsettings set org.nemo.preferences show-home-icon-toolbar true
+	gsettings set org.nemo.preferences show-open-in-terminal-toolbar true
+	gsettings set org.nemo.preferences.menu-config selection-menu-copy-to true
+	gsettings set org.nemo.preferences.menu-config selection-menu-move-to true
+fi
+
+#-------------------------------------------------------------
 ## Applets
 #-------------------------------------------------------------
 
@@ -479,9 +496,6 @@ if [ "$INSTALL_APPLETS" = true ]; then
 	)"
 	[ -z "$CINNAMENU_INSTANCE_FALLBACK" ] && CINNAMENU_INSTANCE_FALLBACK="1"
 	[ -z "$GROUPED_INSTANCE_FALLBACK" ] && GROUPED_INSTANCE_FALLBACK="1"
-
-	info "*** Backing up current Cinnamon panel applet layout..."
-	gsettings get org.cinnamon enabled-applets > "$BACKUP"
 
 	info "*** Updating panel layout: center=Cinnamenu+Grouped Windows List, others=right..."
 	CURRENT_APPLETS="$(gsettings get org.cinnamon enabled-applets)"
@@ -548,7 +562,13 @@ for _panel, uuid, suffix in other_applets:
 print(repr(result))
 PY
 )"
-	gsettings set org.cinnamon enabled-applets "$UPDATED_APPLETS"
+	if [ "$CURRENT_APPLETS" != "$UPDATED_APPLETS" ]; then
+		info "*** Backing up current Cinnamon panel applet layout..."
+		printf '%s\n' "$CURRENT_APPLETS" > "$BACKUP"
+		gsettings set org.cinnamon enabled-applets "$UPDATED_APPLETS"
+	else
+		log "*** Panel layout already matches desired configuration"
+	fi
 
 	info "*** Resolving Cinnamenu settings files..."
 	readarray -t CINNAMENU_INSTANCE_IDS < <(python3 - "$UPDATED_APPLETS" "$UUID" <<'PY'
@@ -884,24 +904,32 @@ if [ "$INSTALL_ARTCRAFT" = true ]; then
 	fi
 
 	if [ -f "$ARTCRAFT_PATH" ]; then
-		info "*** Scheduling one-time ArtCraft launch for next login..."
-		mkdir -p "$HOME/.local/bin" "$HOME/.config/autostart"
-		cat > "$ARTCRAFT_ONCE_SCRIPT" <<EOF
+		if [ -f "$ARTCRAFT_ONCE_DONE_MARKER" ]; then
+			log "*** One-time ArtCraft launch already completed on a previous run"
+		elif [ -f "$ARTCRAFT_ONCE_DESKTOP" ] && [ -f "$ARTCRAFT_ONCE_SCRIPT" ]; then
+			log "*** One-time ArtCraft launch is already scheduled for next login"
+		else
+			info "*** Scheduling one-time ArtCraft launch for next login..."
+			mkdir -p "$HOME/.local/bin" "$HOME/.config/autostart" "$(dirname "$ARTCRAFT_ONCE_DONE_MARKER")"
+			cat > "$ARTCRAFT_ONCE_SCRIPT" <<EOF
 #!/bin/bash
 set -e
 DESKTOP_FILE="$ARTCRAFT_ONCE_DESKTOP"
 SCRIPT_FILE="$ARTCRAFT_ONCE_SCRIPT"
 APPIMAGE="$ARTCRAFT_PATH"
+MARKER_FILE="$ARTCRAFT_ONCE_DONE_MARKER"
 
 rm -f "\$DESKTOP_FILE"
 if [ -x "\$APPIMAGE" ]; then
 	nohup "\$APPIMAGE" >/dev/null 2>&1 &
 fi
+mkdir -p "\$(dirname "\$MARKER_FILE")"
+touch "\$MARKER_FILE"
 rm -f "\$SCRIPT_FILE"
 EOF
-		chmod +x "$ARTCRAFT_ONCE_SCRIPT"
+			chmod +x "$ARTCRAFT_ONCE_SCRIPT"
 
-		cat > "$ARTCRAFT_ONCE_DESKTOP" <<EOF
+			cat > "$ARTCRAFT_ONCE_DESKTOP" <<EOF
 [Desktop Entry]
 Type=Application
 Version=1.0
@@ -912,6 +940,7 @@ Terminal=false
 X-GNOME-Autostart-enabled=true
 NoDisplay=true
 EOF
+		fi
 	else
 		warn "*** ArtCraft launcher file not found at $ARTCRAFT_PATH; skipping one-time launch setup"
 	fi
@@ -956,10 +985,14 @@ EOF
 fi
 
 log "Setup is complete!. Please restart your system to apply all changes."
-read -r -p "Reboot now? Press Y to reboot immediately, or any other key to skip: " REBOOT_CHOICE
-if [[ "$REBOOT_CHOICE" =~ ^[Yy]$ ]]; then
-	info "*** Rebooting now..."
-	sudo reboot
+if [ -t 0 ]; then
+	read -r -p "Reboot now? Press Y to reboot immediately, or any other key to skip: " REBOOT_CHOICE
+	if [[ "$REBOOT_CHOICE" =~ ^[Yy]$ ]]; then
+		info "*** Rebooting now..."
+		sudo reboot
+	else
+		info "*** Reboot skipped. Please reboot later to apply all changes."
+	fi
 else
-	info "*** Reboot skipped. Please reboot later to apply all changes."
+	info "*** Non-interactive run detected; skipping reboot prompt."
 fi
