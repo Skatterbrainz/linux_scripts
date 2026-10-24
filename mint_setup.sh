@@ -1,7 +1,7 @@
 #!/bin/bash
 #-------------------------------------------------------------
 # Linux Mint setup script by Skatterbrainz
-# version: 1.11.0, 10/23/2026
+# version: 1.12.0, 10/23/2026
 #-------------------------------------------------------------
 # To invoke this from a terminal using wget or curl:
 # wget -O /tmp/mint_setup.sh <URL> && /tmp/mint_setup.sh
@@ -11,6 +11,7 @@ INSTALL_VSCODE=true
 INSTALL_POWERSHELL=true
 INSTALL_VIRTUALBOX=true
 INSTALL_APPLET_VBOX=true
+INSTALL_EXTENSION_VBOX=true
 INSTALL_ARTCRAFT=true
 ENABLE_FIREWALL=true
 INSTALL_APPLETS=true
@@ -54,7 +55,6 @@ declare -a aptpackages=(
 
 declare -a flatpak_apps=(
 	"com.bitwarden.desktop"
-	"com-github.hluk.copyq"
 	"org.gimp.GIMP"
 	"org.gtk.Gtk3theme.Adapta-Nokto"
 	"org.gnome.Papers"
@@ -75,7 +75,7 @@ declare -a flatpak_apps=(
 WALLPAPER_URL="https://raw.githubusercontent.com/Skatterbrainz/Garage/refs/heads/master/qYeaEQC-water-droplets-wallpaper.jpg"
 WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
 WALLPAPER="$WALLPAPER_DIR/qYeaEQC-water-droplets-wallpaper.jpg"
-ARTCRAFT_URI="https://github.com/storytold/craft-launcher/releases/download/v0.6.1/artcraft-launcher-0.6.1-linux-x86_64.AppImage"
+ARTCRAFT_URI="https://github.com/storytold/craft-launcher/releases/download/v0.7.0/artcraft-launcher-0.7.0-linux-x86_64.AppImage"
 ARTCRAFT_PATH="$HOME/Applications/$(basename "$ARTCRAFT_URI")"
 mkdir -p "$HOME/Applications"
 
@@ -193,6 +193,40 @@ fi
 
 log "Starting system setup..."
 
+detect_virtualbox_guest() {
+	local detected=""
+
+	if command -v systemd-detect-virt >/dev/null 2>&1; then
+		detected="$(systemd-detect-virt 2>/dev/null || true)"
+		if [ "$detected" = "oracle" ]; then
+			return 0
+		fi
+	fi
+
+	for dmi_file in \
+		"/sys/class/dmi/id/product_name" \
+		"/sys/class/dmi/id/product_version" \
+		"/sys/class/dmi/id/sys_vendor" \
+		"/sys/class/dmi/id/board_vendor"; do
+		if [ -r "$dmi_file" ] && grep -Eqi 'virtualbox|innotek|oracle vm' "$dmi_file"; then
+			return 0
+		fi
+	done
+
+	return 1
+}
+
+if detect_virtualbox_guest; then
+	if [ "$INSTALL_VIRTUALBOX" = true ]; then
+		warn "*** VirtualBox guest detected; disabling VirtualBox host install and dependent integrations"
+	fi
+	INSTALL_VIRTUALBOX=false
+	INSTALL_APPLET_VBOX=false
+	INSTALL_EXTENSION_VBOX=false
+fi
+
+VIRTUALBOX_AVAILABLE=false
+
 safe_apt_update
 
 FILE="/usr/bin/nala"
@@ -284,21 +318,25 @@ fi
 #-------------------------------------------------------------
 
 if [ "$INSTALL_VIRTUALBOX" = true ]; then
-	# Skip this if the machine is a VM guest running inside VirtualBox
-	if systemd-detect-virt -q && [ "$(systemd-detect-virt)" = "oracle" ]; then
-		log "*** Running inside VirtualBox VM, skipping VirtualBox installation"
+	FILE="/bin/VBox"
+	if [ -f "$FILE" ]; then
+		log "*** VirtualBox 7 is already installed"
 	else
-		FILE="/bin/VBox"
-		if [ -f "$FILE" ]; then
-			log "*** VirtualBox 7 is already installed"
-		else
-			info "*** Installing VirtualBox 7.2.20 ..."
-			wget https://download.virtualbox.org/virtualbox/7.2.20/virtualbox-7.2_7.2.20-175154~Ubuntu~noble_amd64.deb
-			sudo DEBIAN_FRONTEND=noninteractive apt install ./virtualbox-7.2_7.2.20-175154~Ubuntu~noble_amd64.deb -y < /dev/null
-			rm virtualbox-7.2_7.2.20-175154~Ubuntu~noble_amd64.deb
-		fi
+		info "*** Installing VirtualBox 7.2.20 ..."
+		wget https://download.virtualbox.org/virtualbox/7.2.20/virtualbox-7.2_7.2.20-175154~Ubuntu~noble_amd64.deb
+		sudo DEBIAN_FRONTEND=noninteractive apt install ./virtualbox-7.2_7.2.20-175154~Ubuntu~noble_amd64.deb -y < /dev/null
+		rm virtualbox-7.2_7.2.20-175154~Ubuntu~noble_amd64.deb
 	fi
 fi
+
+if command -v vboxmanage >/dev/null 2>&1; then
+	VIRTUALBOX_AVAILABLE=true
+else
+	INSTALL_APPLET_VBOX=false
+	INSTALL_EXTENSION_VBOX=false
+fi
+
+info "*** VirtualBox feature status: host-install=$INSTALL_VIRTUALBOX, available=$VIRTUALBOX_AVAILABLE, applet=$INSTALL_APPLET_VBOX, extension=$INSTALL_EXTENSION_VBOX"
 
 #-------------------------------------------------------------
 ## Flatpak applications
@@ -379,7 +417,7 @@ if [ "$INSTALL_APPLETS" = true ]; then
 		rm weather@mockturtl.zip*
 	fi
 
-	if [ "$INSTALL_VIRTUALBOX" = true ]; then
+	if [ "$INSTALL_APPLET_VBOX" = true ] && [ "$VIRTUALBOX_AVAILABLE" = true ]; then
 		VFILE="/usr/bin/vboxmanage"
 		if [ -f "$VFILE" ]; then
 			FILE="vboxlauncher@mockturtl/metadata.json"
@@ -390,9 +428,6 @@ if [ "$INSTALL_APPLETS" = true ]; then
 				wget https://cinnamon-spices.linuxmint.com/files/applets/vboxlauncher@mockturtl.zip && unzip vboxlauncher@mockturtl.zip
 				rm vboxlauncher@mockturtl.zip*
 			fi
-		else
-			info "*** VBoxManage not found, installing VirtualBox applet..."
-			sudo DEBIAN_FRONTEND=noninteractive apt install -y virtualbox < /dev/null
 		fi
 	fi
 
@@ -626,13 +661,15 @@ if [ "$INSTALL_EXTENSIONS" = true ]; then
 		rm copy-path-to-clipboard@claudiux.zip*
 	fi
 
-	FILE="vbox@claudiux/metadata.json"
-	if [ -f "$FILE" ]; then
-		log "*** Extension: vbox already installed"
-	else
-		info "*** Downloading extension: vbox..."
-		wget https://cinnamon-spices.linuxmint.com/files/extensions/vbox@claudiux.zip && unzip vbox@claudiux.zip
-		rm vbox@claudiux.zip*
+	if [ "$INSTALL_EXTENSION_VBOX" = true ] && [ "$VIRTUALBOX_AVAILABLE" = true ]; then
+		FILE="vbox@claudiux/metadata.json"
+		if [ -f "$FILE" ]; then
+			log "*** Extension: vbox already installed"
+		else
+			info "*** Downloading extension: vbox..."
+			wget https://cinnamon-spices.linuxmint.com/files/extensions/vbox@claudiux.zip && unzip vbox@claudiux.zip
+			rm vbox@claudiux.zip*
+		fi
 	fi
 fi
 
@@ -685,7 +722,7 @@ fi
 
 log "*** Applying system tweaks..."
 
-if [ "$INSTALL_VBOX" = true ]; then
+if [ "$VIRTUALBOX_AVAILABLE" = true ]; then
 	VFILE="/usr/bin/vboxmanage"
 	if [ -f "$VFILE" ]; then
 		# Disable KVM modules to avoid VirtualBox conflicts
