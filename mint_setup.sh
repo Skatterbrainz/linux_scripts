@@ -2,7 +2,7 @@
 #-------------------------------------------------------------
 # Linux Mint setup script by Skatterbrainz
 # Source: https://github.com/Skatterbrainz/linux_scripts/blob/main/mint_setup.sh
-# version: 1.20.0, 10/24/2026
+# version: 1.21.0, 10/24/2026
 #-------------------------------------------------------------
 # To invoke this from a terminal using wget or curl obtain the URL from the "raw" view of this script:
 # wget -O /tmp/mint_setup.sh <URL> && /tmp/mint_setup.sh
@@ -24,6 +24,8 @@ INSTALL_EXTENSIONS=true
 INSTALL_WALLPAPER=true
 CONFIGURE_PANEL=true
 CONFIGURE_NEMO=true
+RUN_FULL_UPGRADE=false
+APPLY_VIRTUALBOX_KERNEL_TWEAKS=false
 # Cinnamenu icon can be a theme icon name ("cinnamon-symbolic") or an absolute image path.
 CINNAMENU_ICON="cinnamon-symbolic"
 # Calendar applet: enable "Use a custom date format".
@@ -402,9 +404,15 @@ if [ "$ENABLE_FIREWALL" = true ]; then
 fi
 
 info "*** Checking for updates..."
-#sudo nala update && sudo apt upgrade -y
-sudo nala upgrade -y < /dev/null
-flatpak update -y < /dev/null
+if [ "$RUN_FULL_UPGRADE" = true ]; then
+	#sudo nala update && sudo apt upgrade -y
+	sudo nala upgrade -y < /dev/null
+	if [ "$INSTALL_FLATPAKS" = true ]; then
+		flatpak update -y < /dev/null
+	fi
+else
+	log "*** Skipping full system upgrade (RUN_FULL_UPGRADE=false)"
+fi
 
 #-------------------------------------------------------------
 # Themes and Icons
@@ -984,12 +992,12 @@ fi
 
 log "*** Applying system tweaks..."
 
-if [ "$VIRTUALBOX_AVAILABLE" = true ]; then
+if [ "$APPLY_VIRTUALBOX_KERNEL_TWEAKS" = true ] && [ "$VIRTUALBOX_AVAILABLE" = true ]; then
 	VFILE="/usr/bin/vboxmanage"
 	if [ -f "$VFILE" ]; then
 		# Disable KVM modules to avoid VirtualBox conflicts
 		info "*** Disabling KVM modules to avoid VirtualBox conflicts..."
-	sudo tee /etc/modprobe.d/blacklist-kvm.conf > /dev/null << 'EOF'
+		sudo tee /etc/modprobe.d/blacklist-kvm.conf > /dev/null << 'EOF'
 blacklist kvm
 blacklist kvm_intel
 blacklist kvm_amd
@@ -997,6 +1005,8 @@ EOF
 		log "*** Disabling KVM modules..."
 		sudo update-initramfs -u
 	fi
+else
+	log "*** Skipping VirtualBox kernel tweaks (APPLY_VIRTUALBOX_KERNEL_TWEAKS=false or VirtualBox unavailable)"
 fi
 
 #-------------------------------------------------------------
