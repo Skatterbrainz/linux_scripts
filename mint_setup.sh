@@ -1,7 +1,8 @@
 #!/bin/bash
 #-------------------------------------------------------------
 # Linux Mint setup script by Skatterbrainz
-# version: 1.19.0, 10/24/2026
+# Source: https://github.com/Skatterbrainz/linux_scripts/blob/main/mint_setup.sh
+# version: 1.20.0, 10/24/2026
 #-------------------------------------------------------------
 # To invoke this from a terminal using wget or curl obtain the URL from the "raw" view of this script:
 # wget -O /tmp/mint_setup.sh <URL> && /tmp/mint_setup.sh
@@ -11,10 +12,12 @@
 INSTALL_BRAVE=true
 INSTALL_VSCODE=true
 INSTALL_POWERSHELL=true
+INSTALL_FLATPAKS=true
 INSTALL_VIRTUALBOX=true
 INSTALL_APPLET_VBOX=true
 INSTALL_EXTENSION_VBOX=true
 INSTALL_ARTCRAFT=true
+INSTALL_THEME=true
 ENABLE_FIREWALL=true
 INSTALL_APPLETS=true
 INSTALL_EXTENSIONS=true
@@ -82,6 +85,8 @@ declare -a flatpak_apps=(
 WALLPAPER_URL="https://raw.githubusercontent.com/Skatterbrainz/Garage/refs/heads/master/qYeaEQC-water-droplets-wallpaper.jpg"
 WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
 WALLPAPER="$WALLPAPER_DIR/qYeaEQC-water-droplets-wallpaper.jpg"
+POWERSHELL_SOURCE="https://github.com/PowerShell/PowerShell/releases/download/v7.6.8/powershell-lts_7.6.8-1.deb_amd64.deb"
+VIRTUALBOX_SOURCE="https://download.virtualbox.org/virtualbox/7.2.20/virtualbox-7.2_7.2.20-175154~Ubuntu~noble_amd64.deb"
 ARTCRAFT_URI="https://github.com/storytold/craft-launcher/releases/download/v0.7.0/artcraft-launcher-0.7.0-linux-x86_64.AppImage"
 ARTCRAFT_PATH="$HOME/Applications/$(basename "$ARTCRAFT_URI")"
 ARTCRAFT_ONCE_SCRIPT="$HOME/.local/bin/mintsetup-launch-artcraft-once.sh"
@@ -252,6 +257,10 @@ VIRTUALBOX_AVAILABLE=false
 
 safe_apt_update
 
+#-------------------------------------------------------------
+# Install nala 
+#-------------------------------------------------------------
+
 FILE="/usr/bin/nala"
 if [ -f "$FILE" ]; then
 	log "*** Nala is already installed"
@@ -268,14 +277,14 @@ dedupe_nala_sources
 safe_apt_update
 
 #-------------------------------------------------------------
-## Apt packages 
+# Apt packages 
 #-------------------------------------------------------------
 
 info "*** Installing apt package set..."
 sudo nala install -y "${aptpackages[@]}" < /dev/null
 
 #-------------------------------------------------------------
-## Brave Browser
+# Brave Browser
 #-------------------------------------------------------------
 
 if [ "$INSTALL_BRAVE" = true ]; then
@@ -293,10 +302,10 @@ if [ "$INSTALL_BRAVE" = true ]; then
 	fi
 fi
 
-cd ~/Downloads
+#cd ~/Downloads
 
 #-------------------------------------------------------------
-## PowerShell 7.6.8 (may need to update often)
+# PowerShell 7.6.8 (may need to update often)
 #-------------------------------------------------------------
 
 if [ "$INSTALL_POWERSHELL" = true ]; then
@@ -306,15 +315,15 @@ if [ "$INSTALL_POWERSHELL" = true ]; then
 	else
 		info "*** Installing PowerShell 7.6.8..."
 		sudo DEBIAN_FRONTEND=noninteractive apt-get install -y wget < /dev/null
-		wget https://github.com/PowerShell/PowerShell/releases/download/v7.6.8/powershell-lts_7.6.8-1.deb_amd64.deb
-		sudo DEBIAN_FRONTEND=noninteractive dpkg -i powershell-lts_7.6.8-1.deb_amd64.deb < /dev/null
+		wget "$POWERSHELL_SOURCE"
+		sudo DEBIAN_FRONTEND=noninteractive dpkg -i "$(basename "$POWERSHELL_SOURCE")" < /dev/null
 		sudo DEBIAN_FRONTEND=noninteractive apt-get install -f < /dev/null
-		rm powershell-lts_7.6.8-1.deb_amd64.deb
+		rm "$(basename "$POWERSHELL_SOURCE")"
 	fi
 fi
 
 #-------------------------------------------------------------
-## Visual Studio Code 1.104.0 (may need to update often)
+# Visual Studio Code 1.104.0 (may need to update often)
 #-------------------------------------------------------------
 
 if [ "$INSTALL_VSCODE" = true ]; then
@@ -337,7 +346,7 @@ if [ "$INSTALL_VSCODE" = true ]; then
 fi
 
 #-------------------------------------------------------------
-## VirtualBox 7.2.20 (may need to update often)
+# VirtualBox 7.2.20 (may need to update often)
 #-------------------------------------------------------------
 
 if [ "$INSTALL_VIRTUALBOX" = true ]; then
@@ -346,9 +355,9 @@ if [ "$INSTALL_VIRTUALBOX" = true ]; then
 		log "*** VirtualBox 7 is already installed"
 	else
 		info "*** Installing VirtualBox 7.2.20 ..."
-		wget https://download.virtualbox.org/virtualbox/7.2.20/virtualbox-7.2_7.2.20-175154~Ubuntu~noble_amd64.deb
-		sudo DEBIAN_FRONTEND=noninteractive apt install ./virtualbox-7.2_7.2.20-175154~Ubuntu~noble_amd64.deb -y < /dev/null
-		rm virtualbox-7.2_7.2.20-175154~Ubuntu~noble_amd64.deb
+		wget "$VIRTUALBOX_SOURCE"
+		sudo DEBIAN_FRONTEND=noninteractive apt install ./"$(basename "$VIRTUALBOX_SOURCE")" -y < /dev/null
+		rm "$(basename "$VIRTUALBOX_SOURCE")"
 	fi
 fi
 
@@ -362,21 +371,23 @@ fi
 info "*** VirtualBox feature status: host-install=$INSTALL_VIRTUALBOX, available=$VIRTUALBOX_AVAILABLE, applet=$INSTALL_APPLET_VBOX, extension=$INSTALL_EXTENSION_VBOX"
 
 #-------------------------------------------------------------
-## Flatpak applications
+# Flatpak applications
 #-------------------------------------------------------------
 
-for app in "${flatpak_apps[@]}"; do
-	if flatpak list | grep -q "$app"; then
-		log "*** Flatpak application $app is already installed"
-		continue
-	else
-		info "*** Installing Flatpak application: $app"
-		flatpak install "$app" -y < /dev/null
-	fi
-done
+if [ "$INSTALL_FLATPAKS" = true ]; then
+	for app in "${flatpak_apps[@]}"; do
+		if flatpak list | grep -q "$app"; then
+			log "*** Flatpak application $app is already installed"
+			continue
+		else
+			info "*** Installing Flatpak application: $app"
+			flatpak install "$app" -y < /dev/null
+		fi
+	done
+fi
 
 #-------------------------------------------------------------
-## System Configuration changes
+# System Configuration changes
 #-------------------------------------------------------------
 
 if [ "$ENABLE_FIREWALL" = true ]; then
@@ -396,36 +407,38 @@ sudo nala upgrade -y < /dev/null
 flatpak update -y < /dev/null
 
 #-------------------------------------------------------------
-## Themes and Icons
+# Themes and Icons
 #-------------------------------------------------------------
 
-FILE="/usr/share/icons/Papirus-Dark/index.theme"
-if [ -f "$FILE" ]; then
-	log "*** Papirus-Dark icons already installed"
-	#echo -e "${GREEN}*** Papirus-Dark icons already installed${NC}"
-else
-	#echo -e "${YELLOW}*** Downloading Papirus-Dark theme...${NC}"
-	info "*** Downloading Papirus-Dark theme..."
-	sudo DEBIAN_FRONTEND=noninteractive apt install -y software-properties-common < /dev/null
-	sudo DEBIAN_FRONTEND=noninteractive add-apt-repository ppa:papirus/papirus -y < /dev/null
-	safe_apt_update
-	sudo DEBIAN_FRONTEND=noninteractive apt install papirus-icon-theme -y < /dev/null
-	info "*** Setting Papirus-Dark as icon theme"
-	gsettings set org.cinnamon.desktop.interface icon-theme "Papirus-Dark"
-fi
+if [ "$INSTALL_THEME" = true ]; then
+	FILE="/usr/share/icons/Papirus-Dark/index.theme"
+	if [ -f "$FILE" ]; then
+		log "*** Papirus-Dark icons already installed"
+		#echo -e "${GREEN}*** Papirus-Dark icons already installed${NC}"
+	else
+		#echo -e "${YELLOW}*** Downloading Papirus-Dark theme...${NC}"
+		info "*** Downloading Papirus-Dark theme..."
+		sudo DEBIAN_FRONTEND=noninteractive apt install -y software-properties-common < /dev/null
+		sudo DEBIAN_FRONTEND=noninteractive add-apt-repository ppa:papirus/papirus -y < /dev/null
+		safe_apt_update
+		sudo DEBIAN_FRONTEND=noninteractive apt install papirus-icon-theme -y < /dev/null
+		info "*** Setting Papirus-Dark as icon theme"
+		gsettings set org.cinnamon.desktop.interface icon-theme "Papirus-Dark"
+	fi
 
-DESKTOP_THEME=$(gsettings get org.cinnamon.desktop.interface gtk-theme)
-if [[ "$DESKTOP_THEME" == *"Mint-Y-Dark"* ]]; then
-	log "*** Current theme is already: Mint-Y-Dark"
-else
-	info "*** Setting theme: Mint-Y-Dark"
-	gsettings set org.cinnamon.desktop.interface gtk-theme "Mint-Y-Dark-Blue"
-	gsettings set org.cinnamon.desktop.interface cursor-theme "Breeze"
-	gsettings set org.cinnamon.desktop.interface icon-theme "Papirus-Dark"
+	DESKTOP_THEME=$(gsettings get org.cinnamon.desktop.interface gtk-theme)
+	if [[ "$DESKTOP_THEME" == *"Mint-Y-Dark"* ]]; then
+		log "*** Current theme is already: Mint-Y-Dark"
+	else
+		info "*** Setting theme: Mint-Y-Dark"
+		gsettings set org.cinnamon.desktop.interface gtk-theme "Mint-Y-Dark-Blue"
+		gsettings set org.cinnamon.desktop.interface cursor-theme "Breeze"
+		gsettings set org.cinnamon.desktop.interface icon-theme "Papirus-Dark"
+	fi
 fi
 
 #-------------------------------------------------------------
-## Nemo File Manager
+# Nemo File Manager
 #-------------------------------------------------------------
 
 if [ "$CONFIGURE_NEMO" = true ]; then
@@ -440,7 +453,7 @@ if [ "$CONFIGURE_NEMO" = true ]; then
 fi
 
 #-------------------------------------------------------------
-## Applets
+# Applets
 #-------------------------------------------------------------
 
 if [ "$INSTALL_APPLETS" = true ]; then
@@ -849,12 +862,12 @@ PY
 fi
 
 #-------------------------------------------------------------
-## Actions
+# Actions
 #-------------------------------------------------------------
 
 
 #-------------------------------------------------------------
-## Extensions
+# Extensions
 #-------------------------------------------------------------
 
 if [ "$INSTALL_EXTENSIONS" = true ]; then
@@ -895,7 +908,7 @@ if [ "$INSTALL_WALLPAPER" = true ]; then
 fi
 
 #-------------------------------------------------------------
-## Additional Utilities and AppImages
+# Additional Utilities and AppImages
 #-------------------------------------------------------------
 
 mkdir -p "$HOME/Applications"
@@ -950,6 +963,10 @@ EOF
 fi
 export PATH="$HOME/Applications:$PATH"
 
+#-------------------------------------------------------------
+# Install Draw.io
+#-------------------------------------------------------------
+
 if ! command -v drawio &> /dev/null; then
 	DRAWIO_URI="https://github.com/jgraph/drawio-desktop/releases/download/v32.5.5/drawio-amd64-32.5.5.deb"
 	DRAWIO_PATH="$HOME/Applications/$(basename "$DRAWIO_URI")"
@@ -961,14 +978,9 @@ if ! command -v drawio &> /dev/null; then
 	sudo DEBIAN_FRONTEND=noninteractive apt-get install -f -y < /dev/null
 fi
 
-#FILE="~/.cargo/bin/oniux"
-#if [ -f "$FILE" ]; then
-#	log "*** Oniux is already installed."
-#else
-#	info "*** Installing Oniux..."
-#	cargo install --git https://gitlab.torproject.org/tpo/core/oniux --tag v0.4.0 oniux
-#	info "Oniux installed successfully. Use: oniux <command> to launch with Tor envelope."
-#fi
+#-------------------------------------------------------------
+# System Tweaks
+#-------------------------------------------------------------
 
 log "*** Applying system tweaks..."
 
@@ -986,6 +998,10 @@ EOF
 		sudo update-initramfs -u
 	fi
 fi
+
+#-------------------------------------------------------------
+# Final Steps
+#-------------------------------------------------------------
 
 log "Setup is complete!. Please restart your system to apply all changes."
 if [ -r /dev/tty ]; then
