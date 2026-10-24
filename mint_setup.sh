@@ -2,7 +2,7 @@
 #-------------------------------------------------------------
 # Linux Mint setup script by Skatterbrainz
 # Source: https://github.com/Skatterbrainz/linux_scripts/blob/main/mint_setup.sh
-# version: 1.21.0, 10/24/2026
+# version: 1.22.0, 10/24/2026
 #-------------------------------------------------------------
 # To invoke this from a terminal using wget or curl obtain the URL from the "raw" view of this script:
 # wget -O /tmp/mint_setup.sh <URL> && /tmp/mint_setup.sh
@@ -96,6 +96,10 @@ ARTCRAFT_ONCE_DESKTOP="$HOME/.config/autostart/mintsetup-artcraft-once.desktop"
 ARTCRAFT_ONCE_DONE_MARKER="$HOME/.local/state/mintsetup/artcraft-once-launch.done"
 mkdir -p "$HOME/Applications"
 
+#-------------------------------------------------------------
+# DO NOT EDIT BELOW THIS LINE UNLESS YOU KNOW WHAT YOU ARE DOING
+#-------------------------------------------------------------
+
 LOG_FILE="$HOME/mintsetup.log"
 LOG_FILE_PREVIOUS="$HOME/mintsetup.log.1"
 if [ -f "$LOG_FILE" ]; then
@@ -103,6 +107,7 @@ if [ -f "$LOG_FILE" ]; then
 fi
 exec > >(tee -a "$LOG_FILE") 2>&1
 echo "[INFO] ===== mint_setup.sh started at $(date '+%Y-%m-%d %H:%M:%S') ====="
+echo "[INFO] script version: 1.22.0"
 
 #-------------------------------------------------------------
 # Color codes and logging functions
@@ -992,7 +997,10 @@ fi
 
 log "*** Applying system tweaks..."
 
-if [ "$APPLY_VIRTUALBOX_KERNEL_TWEAKS" = true ] && [ "$VIRTUALBOX_AVAILABLE" = true ]; then
+if [ "$INSTALL_VIRTUALBOX" = true ] \
+	&& [ "$APPLY_VIRTUALBOX_KERNEL_TWEAKS" = true ] \
+	&& [ "$VIRTUALBOX_AVAILABLE" = true ] \
+	&& [ "$VIRTUAL_GUEST_TYPE" = "none" ]; then
 	VFILE="/usr/bin/vboxmanage"
 	if [ -f "$VFILE" ]; then
 		# Disable KVM modules to avoid VirtualBox conflicts
@@ -1006,7 +1014,7 @@ EOF
 		sudo update-initramfs -u
 	fi
 else
-	log "*** Skipping VirtualBox kernel tweaks (APPLY_VIRTUALBOX_KERNEL_TWEAKS=false or VirtualBox unavailable)"
+	log "*** Skipping VirtualBox kernel tweaks (requires INSTALL_VIRTUALBOX=true, APPLY_VIRTUALBOX_KERNEL_TWEAKS=true, VIRTUALBOX_AVAILABLE=true, and non-guest host)"
 fi
 
 #-------------------------------------------------------------
