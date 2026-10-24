@@ -1,7 +1,7 @@
 #!/bin/bash
 #-------------------------------------------------------------
 # Linux Mint setup script by Skatterbrainz
-# version: 1.12.0, 10/23/2026
+# version: 1.14.0, 10/23/2026
 #-------------------------------------------------------------
 # To invoke this from a terminal using wget or curl:
 # wget -O /tmp/mint_setup.sh <URL> && /tmp/mint_setup.sh
@@ -20,6 +20,10 @@ INSTALL_WALLPAPER=true
 CONFIGURE_PANEL=true
 # Cinnamenu icon can be a theme icon name ("cinnamon-symbolic") or an absolute image path.
 CINNAMENU_ICON="cinnamon-symbolic"
+# Calendar applet: enable "Use a custom date format".
+CALENDAR_USE_CUSTOM_FORMAT=true
+CALENDAR_CUSTOM_FORMAT="%A, %B %e, %H:%M"
+CALENDAR_CUSTOM_TOOLTIP_FORMAT="%A, %B %e, %H:%M"
 # Ordered launcher IDs to pin first in the Grouped Window List (center panel).
 declare -a GROUPED_WINDOW_PINNED_LAUNCHERS=(
 	"libreoffice-writer.desktop"                          # LibreOffice Writer
@@ -79,6 +83,14 @@ ARTCRAFT_URI="https://github.com/storytold/craft-launcher/releases/download/v0.7
 ARTCRAFT_PATH="$HOME/Applications/$(basename "$ARTCRAFT_URI")"
 mkdir -p "$HOME/Applications"
 
+LOG_FILE="$HOME/mintsetup.log"
+LOG_FILE_PREVIOUS="$HOME/mintsetup.log.1"
+if [ -f "$LOG_FILE" ]; then
+	mv -f "$LOG_FILE" "$LOG_FILE_PREVIOUS"
+fi
+exec > >(tee -a "$LOG_FILE") 2>&1
+echo "[INFO] ===== mint_setup.sh started at $(date '+%Y-%m-%d %H:%M:%S') ====="
+
 #-------------------------------------------------------------
 # Color codes and logging functions
 #-------------------------------------------------------------
@@ -110,6 +122,8 @@ error() {
 	echo -e "${RED}[ERROR]${NC} $1"
 	exit 1
 }
+
+trap 'script_exit_code=$?; echo "[INFO] ===== mint_setup.sh finished at $(date "+%Y-%m-%d %H:%M:%S") (exit code: ${script_exit_code}) ====="' EXIT
 
 repair_ubuntu_mirrors() {
 	info "*** Falling back to official Ubuntu mirrors..."
@@ -442,22 +456,38 @@ if [ "$INSTALL_APPLETS" = true ]; then
 
 	UUID="Cinnamenu@json"
 	GROUPED_WINDOWS_UUID="grouped-window-list@cinnamon.org"
+	CALENDAR_UUID="calendar@cinnamon.org"
 	BACKUP="$HOME/cinnamon-enabled-applets.backup"
 	SPICES_DIR="$HOME/.config/cinnamon/spices/$UUID"
 	GROUPED_SPICES_DIR="$HOME/.config/cinnamon/spices/$GROUPED_WINDOWS_UUID"
+	CALENDAR_SPICES_DIR="$HOME/.config/cinnamon/spices/$CALENDAR_UUID"
+	CINNAMENU_INSTANCE_FALLBACK="$(
+		find "$SPICES_DIR" -maxdepth 1 -type f -name '*.json' -printf '%f\n' 2>/dev/null \
+			| sed 's/\.json$//' \
+			| head -n 1
+	)"
+	GROUPED_INSTANCE_FALLBACK="$(
+		find "$GROUPED_SPICES_DIR" -maxdepth 1 -type f -name '*.json' -printf '%f\n' 2>/dev/null \
+			| sed 's/\.json$//' \
+			| head -n 1
+	)"
+	[ -z "$CINNAMENU_INSTANCE_FALLBACK" ] && CINNAMENU_INSTANCE_FALLBACK="1"
+	[ -z "$GROUPED_INSTANCE_FALLBACK" ] && GROUPED_INSTANCE_FALLBACK="1"
 
 	info "*** Backing up current Cinnamon panel applet layout..."
 	gsettings get org.cinnamon enabled-applets > "$BACKUP"
 
 	info "*** Updating panel layout: center=Cinnamenu+Grouped Windows List, others=right..."
 	CURRENT_APPLETS="$(gsettings get org.cinnamon enabled-applets)"
-	UPDATED_APPLETS="$(python3 - "$CURRENT_APPLETS" "$UUID" "$GROUPED_WINDOWS_UUID" <<'PY'
+	UPDATED_APPLETS="$(python3 - "$CURRENT_APPLETS" "$UUID" "$GROUPED_WINDOWS_UUID" "$CINNAMENU_INSTANCE_FALLBACK" "$GROUPED_INSTANCE_FALLBACK" <<'PY'
 import ast
 import sys
 
 items = ast.literal_eval(sys.argv[1])
 cinnamenu_uuid = sys.argv[2]
 grouped_windows_uuid = sys.argv[3]
+cinnamenu_fallback_instance = sys.argv[4]
+grouped_fallback_instance = sys.argv[5]
 
 other_applets = []
 target_panel = None
@@ -478,6 +508,8 @@ for item in items:
         if not cinnamenu_found:
             cinnamenu_found = True
             cinnamenu_suffix = suffix
+            if not cinnamenu_suffix:
+                cinnamenu_suffix = [cinnamenu_fallback_instance]
             if target_panel is None:
                 target_panel = panel
         continue
@@ -486,6 +518,8 @@ for item in items:
         if not grouped_windows_found:
             grouped_windows_found = True
             grouped_windows_suffix = suffix
+            if not grouped_windows_suffix:
+                grouped_windows_suffix = [grouped_fallback_instance]
             if target_panel is None:
                 target_panel = panel
         continue
@@ -628,6 +662,51 @@ PY
 		done
 	else
 		warn "*** Grouped Window List settings file not found under $GROUPED_SPICES_DIR; skipping launcher pinning"
+	fi
+
+	if [ "$CALENDAR_USE_CUSTOM_FORMAT" = true ]; then
+		info "*** Resolving Calendar applet settings files..."
+		readarray -d '' CALENDAR_SETTINGS_FILES < <(find "$CALENDAR_SPICES_DIR" -maxdepth 1 -type f -name '*.json' -print0 2>/dev/null)
+
+		if [ "${#CALENDAR_SETTINGS_FILES[@]}" -gt 0 ]; then
+			info "*** Enabling custom date format in Calendar applet..."
+			for CALENDAR_SETTINGS_FILE in "${CALENDAR_SETTINGS_FILES[@]}"; do
+				cp -a "$CALENDAR_SETTINGS_FILE" "$CALENDAR_SETTINGS_FILE.bak"
+				python3 - "$CALENDAR_SETTINGS_FILE" "$CALENDAR_CUSTOM_FORMAT" "$CALENDAR_CUSTOM_TOOLTIP_FORMAT" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+calendar_custom_format = sys.argv[2]
+calendar_custom_tooltip_format = sys.argv[3]
+settings = json.loads(path.read_text(encoding="utf-8"))
+
+entry = settings.get("use-custom-format")
+if isinstance(entry, dict) and "value" in entry:
+    entry["value"] = True
+else:
+    settings["use-custom-format"] = True
+
+for key, value in (
+    ("custom-format", calendar_custom_format),
+    ("custom-tooltip-format", calendar_custom_tooltip_format),
+):
+    entry = settings.get(key)
+    if isinstance(entry, dict) and "value" in entry:
+        entry["value"] = value
+    else:
+        settings[key] = value
+
+path.write_text(
+    json.dumps(settings, indent=4, ensure_ascii=False) + "\n",
+    encoding="utf-8",
+)
+PY
+			done
+		else
+			warn "*** Calendar settings file not found under $CALENDAR_SPICES_DIR; skipping custom date format toggle"
+		fi
 	fi
 
 	FILE="sound150@claudiux/metadata.json"
