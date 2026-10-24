@@ -27,7 +27,11 @@ declare -a GROUPED_WINDOW_PINNED_LAUNCHERS=(
 	"drawio.desktop"                                      # Draw.io (falls back to common alt IDs)
 	"code.desktop"                                        # Visual Studio Code
 	"brave-browser.desktop"                               # Brave Browser
+	"shutter"                                             # Shutter
 	"com.github.IsmaelMartinez.teams_for_linux.desktop:flatpak" # Teams for Linux
+	"md.obsidian.Obsidian"                                # Obsidian
+	"com.getpostman.Postman"                              # Postman
+	"io.github.shiftey.Desktop"                           # GitHub Desktop
 )
 
 declare -a aptpackages=(
